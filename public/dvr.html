@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema DVR - Câmera ao Vivo</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://vjs.zencdn.net/8.6.1/video-js.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://vjs.zencdn.net/8.6.1/video.min.js"></script>
+    <style>
+        .timeline-container {
+            background: linear-gradient(to right, #1f2937 0%, #374151 85%, #ef4444 100%);
+            position: relative;
+            cursor: pointer;
+            border: 1px solid #4b5563;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .timeline-marker {
+            position: absolute;
+            top: -4px;
+            bottom: -4px;
+            width: 3px;
+            background: #fbbf24;
+            pointer-events: none;
+            box-shadow: 0 0 8px rgba(251, 191, 36, 0.8);
+            transition: left 0.2s ease;
+        }
+        
+        .timeline-marker::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 12px;
+            height: 12px;
+            background: #fbbf24;
+            border-radius: 50%;
+            box-shadow: 0 0 12px rgba(251, 191, 36, 0.6);
+        }
+        
+        .timeline-tick {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background: rgba(255, 255, 255, 0.2);
+            pointer-events: none;
+        }
+        
+        .timeline-label {
+            position: absolute;
+            bottom: -20px;
+            font-size: 10px;
+            color: #9ca3af;
+            transform: translateX(-50%);
+            white-space: nowrap;
+        }
+        
+        .live-badge {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .dvr-controls {
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+        }
+        
+        .time-display {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+        }
+        
+        .segment-indicator {
+            height: 100%;
+            background: linear-gradient(to right,
+                rgba(16, 185, 129, 0.3) 0%,
+                rgba(16, 185, 129, 0.2) 100%);
+            position: absolute;
+            top: 0;
+            left: 0;
+            transition: width 0.3s ease;
+            pointer-events: none;
+        }
+        
+        .video-container {
+            background: #000;
+            position: relative;
+        }
+        
+        .live-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+        }
+        
+        .timeline-tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.95);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            pointer-events: none;
+            transform: translateX(-50%) translateY(-35px);
+            white-space: nowrap;
+            display: none;
+            border: 1px solid rgba(251, 191, 36, 0.5);
+            z-index: 100;
+        }
+        
+        .timeline-tooltip::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 5px solid rgba(0, 0, 0, 0.95);
+        }
+        
+        .timeline-click-indicator {
+            position: absolute;
+            top: -8px;
+            width: 16px;
+            height: 16px;
+            background: #3b82f6;
+            border: 2px solid white;
+            border-radius: 50%;
+            transform: translateX(-50%);
+            display: none;
+            pointer-events: none;
+            animation: clickPulse 0.5s ease;
+        }
+        
+        @keyframes clickPulse {
+            0% { transform: translateX(-50%) scale(1); }
+            50% { transform: translateX(-50%) scale(1.5); opacity: 0.7; }
+            100% { transform: translateX(-50%) scale(1); }
+        }
+        
+        .timeline-wrapper {
+            position: relative;
+            padding-bottom: 25px;
+        }
+        
+        .user-menu {
+            position: absolute;
+            right: 0;
+            top: 100%;
+            margin-top: 8px;
+            background: #1f2937;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            min-width: 200px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+    <div class="container mx-auto p-4 max-w-6xl">
+        <!-- Header -->
+        <div class="mb-6 flex justify-between items-start">
+            <div>
+                <h1 class="text-3xl font-bold mb-2">Sistema DVR - Câmera de Segurança</h1>
+                <p class="text-gray-400">Navegue pelas últimas 48 horas de gravação</p>
+            </div>
+            
+            <!-- User Menu -->
+            <div class="relative">
+                <button id="user-menu-button" class="flex items-center space-x-2 bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded-lg transition-colors">
+                    <i class="fas fa-user-circle text-xl"></i>
+                    <span id="username-display" class="text-sm font-medium">Carregando...</span>
+                    <i class="fas fa-chevron-down text-xs"></i>
+                </button>
+                
+                <div id="user-menu" class="user-menu hidden">
+                    <div class="px-4 py-3 border-b border-gray-700">
+                        <p class="text-xs text-gray-400">Conectado como</p>
+                        <p id="username-menu" class="text-sm font-semibold text-white mt-1"></p>
+                        <p id="login-time" class="text-xs text-gray-500 mt-1"></p>
+                    </div>
+                    <div class="py-2">
+                        <button id="logout-button" class="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors flex items-center">
+                            <i class="fas fa-sign-out-alt mr-2"></i>
+                            Sair
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Video Container -->
+        <div class="video-container rounded-lg overflow-hidden shadow-2xl relative">
+            <!-- Live Indicator -->
+            <div id="live-indicator" class="live-indicator hidden">
+                <span class="bg-red-600 text-white px-3 py-1 rounded-full text-sm font-bold live-badge flex items-center">
+                    <span class="w-2 h-2 bg-white rounded-full mr-2"></span>
+                    AO VIVO
+                </span>
+            </div>
+            
+            <!-- Video Player -->
+            <video id="dvr-player" class="video-js vjs-default-skin vjs-big-play-centered vjs-16-9" 
+                   controls preload="auto">
+            </video>
+        </div>
+
+        <!-- DVR Controls -->
+        <div class="dvr-controls mt-4 p-4 rounded-lg">
+            <!-- Timeline -->
+            <div class="mb-6">
+                <div class="flex justify-between text-xs text-gray-400 mb-2">
+                    <span id="timeline-start">--:--</span>
+                    <span class="text-center font-semibold">Timeline DVR (48 horas)</span>
+                    <span id="timeline-end" class="text-red-400 font-bold">AO VIVO</span>
+                </div>
+                
+                <div class="timeline-wrapper">
+                    <div class="timeline-container h-12 rounded-lg relative overflow-visible" id="timeline">
+                        <div class="segment-indicator" id="segment-indicator"></div>
+                        <div class="timeline-marker" id="timeline-marker"></div>
+                        <div class="timeline-tooltip" id="timeline-tooltip"></div>
+                        <div class="timeline-click-indicator" id="timeline-click-indicator"></div>
+                        <!-- Time ticks will be added dynamically -->
+                        <div id="timeline-ticks"></div>
+                    </div>
+                </div>
+                
+                <div class="flex justify-between mt-3">
+                    <div class="text-sm text-gray-400">
+                        <span class="text-green-400">●</span> <span id="dvr-duration">0h 0m</span> disponível
+                    </div>
+                    <div class="text-sm">
+                        <span class="text-gray-400">Posição:</span>
+                        <span id="current-time" class="time-display text-yellow-400">--:--:--</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Controls - Responsivo para Mobile -->
+            <div class="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                <button id="btn-live" class="bg-red-600 hover:bg-red-700 px-2 sm:px-4 py-2 rounded font-bold transition text-xs sm:text-sm">
+                    🔴 AO VIVO
+                </button>
+                <button id="btn-back-1h" class="bg-gray-700 hover:bg-gray-600 px-2 sm:px-4 py-2 rounded transition text-xs sm:text-sm">
+                    -1h
+                </button>
+                <button id="btn-back-30m" class="bg-gray-700 hover:bg-gray-600 px-2 sm:px-4 py-2 rounded transition text-xs sm:text-sm">
+                    -30m
+                </button>
+                <button id="btn-back-10m" class="bg-gray-700 hover:bg-gray-600 px-2 sm:px-4 py-2 rounded transition text-xs sm:text-sm">
+                    -10m
+                </button>
+                <button id="btn-back-1m" class="bg-gray-700 hover:bg-gray-600 px-2 sm:px-4 py-2 rounded transition text-xs sm:text-sm">
+                    -1m
+                </button>
+                <button id="btn-refresh" class="bg-blue-600 hover:bg-blue-700 px-2 sm:px-4 py-2 rounded transition text-xs sm:text-sm">
+                    🔄
+                </button>
+            </div>
+        </div>
+
+        <!-- Status Info -->
+        <div class="mt-6 grid grid-cols-3 gap-4">
+            <div class="bg-gray-800 p-4 rounded-lg">
+                <h3 class="text-sm text-gray-400 mb-1">Status</h3>
+                <p id="system-status" class="text-lg font-semibold">Conectando...</p>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-lg">
+                <h3 class="text-sm text-gray-400 mb-1">Gravação DVR</h3>
+                <p id="dvr-status" class="text-lg font-semibold">Verificando...</p>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-lg">
+                <h3 class="text-sm text-gray-400 mb-1">Segmentos</h3>
+                <p id="segment-count" class="text-lg font-semibold">0</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let player;
+        let dvrInfo = null;
+        let isLive = true;
+        let currentPosition = 0;
+        let maxDuration = 0;
+        let updateInterval;
+
+        function initializePlayer() {
+            player = videojs('dvr-player', {
+                techOrder: ['html5'],
+                html5: {
+                    vhs: {
+                        overrideNative: true,
+                        withCredentials: false,
+                        // Configurações balanceadas para estabilidade e baixa latência
+                        maxBufferLength: 10, // 10 segundos de buffer
+                        maxBufferSize: 10 * 1024 * 1024, // 10MB buffer
+                        bufferBasedABR: true,
+                        enableLowInitialPlaylist: true,
+                        fastQualityChange: true,
+                        handleManifestRedirects: true,
+                        smoothQualityChange: true,
+                        bandwidth: 5000000, // 5 Mbps inicial
+                        // Configurações de latência
+                        experimentalBufferBasedABR: false,
+                        experimentalLLHLS: false,
+                        liveSyncDuration: 3, // Sincronizar com 3 segundos do live
+                        liveMaxLatencyDuration: 10, // Máximo 10 segundos de latência
+                        playbackRates: [0.5, 1, 1.5, 2],
+                        useBandwidthFromLocalStorage: true
+                    }
+                },
+                liveui: false,
+                fluid: true,
+                errorDisplay: false,
+                controls: true,
+                autoplay: true,
+                muted: true,
+                preload: 'none', // Não pre-carregar para começar do edge
+                // Configurações adicionais para baixa latência
+                liveTracker: {
+                    trackingThreshold: 0,
+                    liveTolerance: 0.5
+                },
+                // Desabilitar controles que podem atrasar
+                playbackRates: false,
+                controlBar: {
+                    playbackRateMenuButton: {
+                        playbackRates: false
+                    }
+                }
+            });
+
+            // Carregar stream
+            loadStream();
+
+            // Event listeners
+            player.on('playing', function() {
+                console.log('Player iniciado');
+                updateUI();
+            });
+
+            player.on('error', function(error) {
+                console.error('Erro no player:', error);
+                setTimeout(loadStream, 5000);
+            });
+
+            player.on('timeupdate', function() {
+                updateTimeDisplay();
+            });
+        }
+
+        function loadStream() {
+            // Usar stream live para baixa latência quando ao vivo
+            const streamUrl = isLive ? '/recordings/live.m3u8' : '/recordings/dvr.m3u8';
+            
+            console.log(`[Player] Carregando stream: ${streamUrl} (${isLive ? 'LIVE' : 'DVR'})`);
+            
+            // Verificar se o arquivo existe
+            $.ajax({
+                url: streamUrl,
+                type: 'HEAD',
+                success: function() {
+                    player.src({
+                        type: 'application/x-mpegURL',
+                        src: streamUrl
+                    });
+                    
+                    if (isLive) {
+                        // Para live, ir próximo ao final
+                        player.one('loadedmetadata', function() {
+                            const duration = player.duration();
+                            if (duration && duration !== Infinity && !isNaN(duration) && duration > 0) {
+                                // Posicionar com 3 segundos de margem para estabilidade
+                                const targetTime = Math.max(0, duration - 3);
+                                player.currentTime(targetTime);
+                            }
+                        });
+                        
+                        // Sincronização APENAS quando estiver em modo LIVE
+                        setInterval(() => {
+                            // IMPORTANTE: Só sincronizar se estiver REALMENTE em modo live
+                            // E NÃO sincronizar automaticamente
+                            if (isLive && player && player.readyState() >= 2) {
+                                try {
+                                    const duration = player.duration();
+                                    const current = player.currentTime();
+                                    
+                                    if (duration && duration !== Infinity && !isNaN(duration) &&
+                                        current !== undefined && !isNaN(current) && duration > 0) {
+                                        
+                                        const delay = duration - current;
+                                        // Só sincronizar se estiver EXTREMAMENTE atrás (mais de 60 segundos)
+                                        // E apenas quando em modo live explícito
+                                        if (delay > 60 && isLive) {
+                                            const targetTime = Math.max(0, duration - 3);
+                                            player.currentTime(targetTime);
+                                            console.log('[Live] Re-sincronizando - delay extremo:', delay.toFixed(1) + 's');
+                                        }
+                                    }
+                                } catch (e) {
+                                    console.debug('Erro ao sincronizar:', e);
+                                }
+                            }
+                        }, 30000); // Verificar apenas a cada 30 segundos
+                        
+                        // Forçar sincronização com live edge (se disponível)
+                        player.on('play', function() {
+                            if (isLive && player.readyState() >= 2) {
+                                setTimeout(() => {
+                                    try {
+                                        const duration = player.duration();
+                                        if (duration && duration !== Infinity && !isNaN(duration) && duration > 0) {
+                                            const targetTime = Math.max(0, duration - 0.1);
+                                            player.currentTime(targetTime);
+                                        }
+                                    } catch (e) {
+                                        console.debug('Erro ao sincronizar no play:', e);
+                                    }
+                                }, 100);
+                            }
+                        });
+                    }
+                    
+                    $('#system-status').text('Conectado (Low Latency)').removeClass('text-red-400').addClass('text-green-400');
+                    
+                    // Mostrar informações de latência
+                    updateLatencyInfo();
+                },
+                error: function() {
+                    $('#system-status').text('Aguardando stream...').removeClass('text-green-400').addClass('text-yellow-400');
+                    setTimeout(loadStream, 2000); // Reduzido para 2 segundos
+                }
+            });
+        }
+        
+        function updateLatencyInfo() {
+            try {
+                if (isLive && player) {
+                    // Calcular latência baseado na diferença entre duração e tempo atual
+                    const duration = player.duration();
+                    const currentTime = player.currentTime();
+                    
+                    if (duration && duration !== Infinity && currentTime !== undefined) {
+                        const latency = duration - currentTime;
+                        
+                        if (latency >= 0) {
+                            const latencyStr = latency.toFixed(1);
+                            $('#system-status').text(`Conectado (Latência: ${latencyStr}s)`);
+                            
+                            // Ajustar cor baseado na latência
+                            if (latency < 2) {
+                                $('#system-status').removeClass('text-yellow-400 text-red-400').addClass('text-green-400');
+                            } else if (latency < 5) {
+                                $('#system-status').removeClass('text-green-400 text-red-400').addClass('text-yellow-400');
+                            } else {
+                                $('#system-status').removeClass('text-green-400 text-yellow-400').addClass('text-red-400');
+                            }
+                        } else {
+                            $('#system-status').text('Conectado (Low Latency)').removeClass('text-yellow-400 text-red-400').addClass('text-green-400');
+                        }
+                    } else {
+                        $('#system-status').text('Conectado (Low Latency)').removeClass('text-yellow-400 text-red-400').addClass('text-green-400');
+                    }
+                }
+            } catch (error) {
+                // Silenciar erros de latência
+                console.debug('Erro ao calcular latência:', error);
+            }
+        }
+
+        function updateDVRInfo() {
+            $.get('/api/dvr/info', function(data) {
+                dvrInfo = data;
+                
+                if (data.available) {
+                    $('#dvr-status').text('Gravando').removeClass('text-yellow-400').addClass('text-green-400');
+                    $('#dvr-duration').text(data.durationFormatted);
+                    $('#segment-count').text(data.segments);
+                    
+                    // Atualizar maxDuration com a duração real baseada nos segmentos
+                    if (data.duration && data.duration > 0) {
+                        maxDuration = data.duration;
+                        console.log(`[DVR Info] Duração atualizada: ${maxDuration}s`);
+                    }
+                    
+                    // Atualizar timeline
+                    updateTimeline();
+                } else {
+                    $('#dvr-status').text('Iniciando...').removeClass('text-green-400').addClass('text-yellow-400');
+                }
+            });
+        }
+
+        function updateTimeline() {
+            if (!dvrInfo || !dvrInfo.available) return;
+            
+            const now = new Date();
+            const startTime = new Date(dvrInfo.startTime);
+            
+            $('#timeline-start').text(formatTime(startTime));
+            $('#timeline-end').html('<span class="text-red-400 font-bold">● AO VIVO</span>');
+            
+            // Usar duração do DVR info que é baseada nos segmentos
+            // Não confiar em player.duration() pois pode ser Infinity em streams DVR
+            if (dvrInfo.duration && dvrInfo.duration > 0) {
+                maxDuration = dvrInfo.duration;
+            }
+            
+            // Atualizar posição do marcador
+            if (isLive) {
+                $('#timeline-marker').css('left', 'calc(100% - 2px)');
+                $('#live-indicator').removeClass('hidden');
+                $('#current-time').addClass('text-red-400').removeClass('text-yellow-400');
+            } else {
+                $('#live-indicator').addClass('hidden');
+                $('#current-time').removeClass('text-red-400').addClass('text-yellow-400');
+                
+                // Calcular posição correta baseada no tempo atual do player
+                if (maxDuration > 0 && currentPosition >= 0) {
+                    const position = (currentPosition / maxDuration) * 100;
+                    const clampedPosition = Math.min(Math.max(0, position), 100);
+                    $('#timeline-marker').css('left', clampedPosition + '%');
+                    
+                    // Debug info
+                    console.log('Timeline update:', {
+                        currentPosition: currentPosition.toFixed(1),
+                        maxDuration: maxDuration.toFixed(1),
+                        position: clampedPosition.toFixed(1) + '%'
+                    });
+                }
+            }
+            
+            // Atualizar indicador de segmentos
+            const segmentWidth = (dvrInfo.segments / (48 * 60 * 6)) * 100; // 6 segmentos por minuto
+            $('#segment-indicator').css('width', Math.min(segmentWidth, 100) + '%');
+            
+            // Adicionar marcadores de tempo
+            updateTimelineTicks();
+        }
+        
+        function updateTimelineTicks() {
+            const ticksContainer = $('#timeline-ticks');
+            ticksContainer.empty();
+            
+            if (!dvrInfo || !dvrInfo.available) return;
+            
+            const duration = maxDuration;
+            const tickInterval = duration > 3600 ? 3600 : 600; // 1h ou 10min dependendo da duração
+            const numTicks = Math.floor(duration / tickInterval);
+            
+            for (let i = 1; i <= numTicks; i++) {
+                const position = (i * tickInterval / duration) * 100;
+                const time = duration - (i * tickInterval);
+                const tickTime = new Date(Date.now() - (time * 1000));
+                
+                const tick = $('<div>')
+                    .addClass('timeline-tick')
+                    .css('left', position + '%');
+                
+                const label = $('<div>')
+                    .addClass('timeline-label')
+                    .css('left', position + '%')
+                    .text(formatTime(tickTime));
+                
+                ticksContainer.append(tick);
+                ticksContainer.append(label);
+            }
+        }
+
+        function formatTime(date) {
+            return date.toLocaleTimeString('pt-BR', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        }
+
+        function updateTimeDisplay() {
+            if (player && player.currentTime) {
+                const current = player.currentTime();
+                const duration = player.duration();
+                
+                if (duration && duration !== Infinity && !isNaN(current)) {
+                    const remaining = duration - current;
+                    
+                    // NÃO alterar automaticamente o modo live
+                    // isLive só muda quando o usuário clica nos botões
+                    currentPosition = current;
+                    
+                    const now = new Date();
+                    const playbackTime = new Date(now - (remaining * 1000));
+                    
+                    $('#current-time').text(playbackTime.toLocaleTimeString('pt-BR'));
+                    
+                    // Atualizar timeline apenas se não estiver sendo manipulada
+                    if (!$('#timeline').is(':active')) {
+                        updateTimeline();
+                    }
+                }
+            }
+        }
+
+        function goToLive() {
+            isLive = true;
+            
+            // Se já está em live, apenas ir para o final
+            if (player.src().includes('live.m3u8')) {
+                const duration = player.duration();
+                if (duration && duration !== Infinity) {
+                    player.currentTime(duration - 0.5);
+                }
+                console.log('[Player] Já em LIVE, indo para o edge');
+            } else {
+                // Trocar para stream live de baixa latência
+                player.src({
+                    type: 'application/x-mpegURL',
+                    src: '/recordings/live.m3u8'
+                });
+                
+                // Forçar ir para o edge do live
+                player.one('loadedmetadata', function() {
+                    const duration = player.duration();
+                    if (duration && duration !== Infinity) {
+                        player.currentTime(duration - 0.5);
+                    }
+                    
+                    // Usar liveTracker se disponível
+                    if (player.liveTracker) {
+                        player.liveTracker.seekToLiveEdge();
+                    }
+                });
+                
+                console.log('[Player] Mudando para LIVE com baixa latência');
+            }
+            
+            $('#system-status').text('Sincronizando com LIVE...').addClass('text-yellow-400');
+        }
+
+        function seekBack(seconds) {
+            console.log(`[SeekBack] Tentando voltar ${seconds} segundos`);
+            isLive = false;
+            
+            // Obter posição atual do player
+            let currentTime = player.currentTime();
+            
+            // Se estiver em live, considerar como estando no final
+            if (isLive || player.src().includes('live.m3u8')) {
+                const effectiveDuration = maxDuration > 0 ? maxDuration : player.duration();
+                if (effectiveDuration && effectiveDuration !== Infinity) {
+                    currentTime = effectiveDuration;
+                }
+            }
+            
+            console.log(`[SeekBack] Posição atual: ${currentTime}s`);
+            
+            // Calcular nova posição: voltar X segundos da posição ATUAL
+            const targetTime = Math.max(0, currentTime - seconds);
+            console.log(`[SeekBack] Nova posição: ${targetTime}s (voltando ${seconds}s)`);
+            
+            // Se precisa trocar de live para DVR
+            const currentSrc = player.src();
+            const needsSwitch = currentSrc && currentSrc.includes('live.m3u8');
+            
+            if (needsSwitch) {
+                console.log('[SeekBack] Trocando de live.m3u8 para dvr.m3u8');
+                
+                // Trocar para DVR
+                player.src({
+                    type: 'application/x-mpegURL',
+                    src: '/recordings/dvr.m3u8'
+                });
+                
+                // Aguardar o player carregar e então navegar
+                let seekExecuted = false;
+                
+                const executeSeek = function() {
+                    if (seekExecuted) return;
+                    seekExecuted = true;
+                    
+                    setTimeout(() => {
+                        console.log(`[SeekBack] Executando seek para ${targetTime}s`);
+                        player.currentTime(targetTime);
+                        currentPosition = targetTime;
+                        updateTimeline();
+                    }, 500);
+                };
+                
+                player.one('loadedmetadata', executeSeek);
+                player.one('loadeddata', executeSeek);
+                player.one('canplay', executeSeek);
+                
+            } else {
+                // Já está em DVR, apenas fazer o seek relativo à posição atual
+                console.log(`[SeekBack] Já em DVR, voltando ${seconds}s da posição atual`);
+                player.currentTime(targetTime);
+                currentPosition = targetTime;
+                updateTimeline();
+            }
+        }
+
+        function updateUI() {
+            updateDVRInfo();
+            updateTimeDisplay();
+        }
+
+        // Timeline click handler
+        $('#timeline').on('click', function(e) {
+            const rect = this.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const percentage = x / rect.width;
+            
+            if (player && maxDuration > 0) {
+                // IMPORTANTE: Desativar modo live ao clicar na timeline
+                isLive = false;
+                
+                const seekTime = percentage * maxDuration;
+                
+                // Atualizar posição imediatamente para feedback visual
+                currentPosition = seekTime;
+                const position = (seekTime / maxDuration) * 100;
+                $('#timeline-marker').css('left', position + '%');
+                
+                // Trocar para stream DVR se estiver em live
+                if (player.src().includes('live.m3u8')) {
+                    player.src({
+                        type: 'application/x-mpegURL',
+                        src: '/recordings/dvr.m3u8'
+                    });
+                    
+                    player.one('loadedmetadata', function() {
+                        player.currentTime(seekTime);
+                        console.log(`[Timeline] Navegando para ${seekTime.toFixed(1)}s (${(percentage * 100).toFixed(1)}%)`);
+                    });
+                } else {
+                    player.currentTime(seekTime);
+                    console.log(`[Timeline] Navegando para ${seekTime.toFixed(1)}s (${(percentage * 100).toFixed(1)}%)`);
+                }
+                
+                // Mostrar indicador de clique na posição correta
+                $('#timeline-click-indicator')
+                    .css({
+                        left: x + 'px',
+                        display: 'block'
+                    });
+                
+                setTimeout(() => {
+                    $('#timeline-click-indicator').fadeOut();
+                }, 500);
+            }
+        });
+        
+        // Timeline hover
+        $('#timeline').on('mousemove', function(e) {
+            const rect = this.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const percentage = x / rect.width;
+            
+            if (dvrInfo && dvrInfo.available && maxDuration > 0) {
+                const hoverTime = percentage * maxDuration;
+                const now = new Date();
+                const hoverDate = new Date(now - ((maxDuration - hoverTime) * 1000));
+                
+                const timeAgo = maxDuration - hoverTime;
+                let timeAgoText = '';
+                
+                if (timeAgo < 60) {
+                    timeAgoText = `${Math.floor(timeAgo)}s atrás`;
+                } else if (timeAgo < 3600) {
+                    timeAgoText = `${Math.floor(timeAgo / 60)}m atrás`;
+                } else {
+                    timeAgoText = `${Math.floor(timeAgo / 3600)}h ${Math.floor((timeAgo % 3600) / 60)}m atrás`;
+                }
+                
+                $('#timeline-tooltip')
+                    .html(`
+                        <div style="font-weight: bold;">${hoverDate.toLocaleTimeString('pt-BR')}</div>
+                        <div style="font-size: 10px; color: #9ca3af; margin-top: 2px;">${timeAgoText}</div>
+                    `)
+                    .css({
+                        left: x + 'px',
+                        display: 'block'
+                    });
+            }
+        });
+        
+        $('#timeline').on('mouseleave', function() {
+            $('#timeline-tooltip').hide();
+        });
+
+        // Button handlers
+        $('#btn-live').click(function() {
+            console.log('[Button] AO VIVO clicado');
+            goToLive();
+        });
+        
+        $('#btn-back-1h').click(function() {
+            console.log('[Button] -1h clicado');
+            seekBack(3600);
+        });
+        
+        $('#btn-back-30m').click(function() {
+            console.log('[Button] -30m clicado');
+            seekBack(1800);
+        });
+        
+        $('#btn-back-10m').click(function() {
+            console.log('[Button] -10m clicado');
+            seekBack(600);
+        });
+        
+        $('#btn-back-1m').click(function() {
+            console.log('[Button] -1m clicado');
+            seekBack(60);
+        });
+        
+        $('#btn-refresh').click(function() {
+            console.log('[Button] Refresh clicado');
+            location.reload();
+        });
+
+        // Initialize
+        $(document).ready(function() {
+            // Check authentication and get user info
+            $.ajax({
+                url: '/api/auth/session',
+                method: 'GET',
+                success: function(response) {
+                    if (response.user) {
+                        $('#username-display').text(response.user.username);
+                        $('#username-menu').text(response.user.username);
+                        
+                        // Format login time
+                        const loginTime = new Date(response.loginTime);
+                        $('#login-time').text('Login: ' + loginTime.toLocaleString('pt-BR'));
+                    }
+                },
+                error: function(xhr) {
+                    if (xhr.status === 401) {
+                        window.location.href = '/login.html?redirect=' + encodeURIComponent(window.location.pathname);
+                    }
+                }
+            });
+            
+            // User menu handlers
+            $('#user-menu-button').click(function(e) {
+                e.stopPropagation();
+                $('#user-menu').toggleClass('hidden');
+            });
+            
+            // Close menu when clicking outside
+            $(document).click(function() {
+                $('#user-menu').addClass('hidden');
+            });
+            
+            $('#user-menu').click(function(e) {
+                e.stopPropagation();
+            });
+            
+            // Logout handler
+            $('#logout-button').click(function() {
+                if (confirm('Deseja realmente sair do sistema?')) {
+                    $.ajax({
+                        url: '/api/auth/logout',
+                        method: 'POST',
+                        success: function() {
+                            window.location.href = '/login.html';
+                        }
+                    });
+                }
+            });
+            
+            initializePlayer();
+            
+            // Update info every 5 seconds
+            updateInterval = setInterval(updateUI, 5000);
+            
+            // Update latency info every second when live
+            setInterval(function() {
+                if (isLive) {
+                    updateLatencyInfo();
+                }
+            }, 1000);
+            
+            // Initial update
+            updateUI();
+            
+            // Adicionar indicador de performance
+            console.log('[DVR] Sistema iniciado com modo Ultra Low Latency');
+            console.log('[DVR] Live: < 2s latência | DVR: 48h buffer');
+        });
+
+        // Cleanup on page unload
+        $(window).on('beforeunload', function() {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+            if (player) {
+                player.dispose();
+            }
+        });
+    </script>
+</body>
+</html>

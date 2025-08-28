@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Sistema DVR</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .input-focus {
+            transition: all 0.3s ease;
+        }
+        .input-focus:focus {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+        .login-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: all 0.3s ease;
+        }
+        .login-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        .shake {
+            animation: shake 0.5s;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-10px); }
+            20%, 40%, 60%, 80% { transform: translateX(10px); }
+        }
+        .loading-spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid white;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center p-4">
+    <div class="glass-effect rounded-2xl p-8 w-full max-w-md shadow-2xl">
+        <!-- Logo/Header -->
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-20 h-20 bg-white bg-opacity-20 rounded-full mb-4">
+                <i class="fas fa-video text-white text-3xl"></i>
+            </div>
+            <h1 class="text-3xl font-bold text-white mb-2">Sistema DVR</h1>
+            <p class="text-white text-opacity-80">Faça login para continuar</p>
+        </div>
+
+        <!-- Login Form -->
+        <form id="loginForm" class="space-y-6">
+            <!-- Username Field -->
+            <div>
+                <label for="username" class="block text-white text-sm font-medium mb-2">
+                    <i class="fas fa-user mr-2"></i>Usuário
+                </label>
+                <input 
+                    type="text" 
+                    id="username" 
+                    name="username"
+                    required
+                    autocomplete="username"
+                    class="input-focus w-full px-4 py-3 bg-white bg-opacity-20 border border-white border-opacity-30 rounded-lg text-white placeholder-white placeholder-opacity-60 focus:outline-none focus:border-white focus:bg-opacity-30"
+                    placeholder="Digite seu usuário"
+                >
+            </div>
+
+            <!-- Password Field -->
+            <div>
+                <label for="password" class="block text-white text-sm font-medium mb-2">
+                    <i class="fas fa-lock mr-2"></i>Senha
+                </label>
+                <div class="relative">
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password"
+                        required
+                        autocomplete="current-password"
+                        class="input-focus w-full px-4 py-3 pr-12 bg-white bg-opacity-20 border border-white border-opacity-30 rounded-lg text-white placeholder-white placeholder-opacity-60 focus:outline-none focus:border-white focus:bg-opacity-30"
+                        placeholder="Digite sua senha"
+                    >
+                    <button 
+                        type="button" 
+                        id="togglePassword"
+                        class="absolute right-3 top-1/2 transform -translate-y-1/2 text-white text-opacity-60 hover:text-opacity-100 focus:outline-none"
+                    >
+                        <i class="fas fa-eye" id="eyeIcon"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Remember Me -->
+            <div class="flex items-center justify-between">
+                <label class="flex items-center text-white text-sm">
+                    <input 
+                        type="checkbox" 
+                        id="remember" 
+                        name="remember"
+                        class="mr-2 rounded border-white border-opacity-30 bg-white bg-opacity-20 text-purple-600 focus:ring-purple-500 focus:ring-opacity-50"
+                    >
+                    <span class="text-opacity-90">Lembrar de mim</span>
+                </label>
+            </div>
+
+            <!-- Error Message -->
+            <div id="errorMessage" class="hidden bg-red-500 bg-opacity-20 border border-red-500 border-opacity-50 text-white px-4 py-3 rounded-lg">
+                <i class="fas fa-exclamation-circle mr-2"></i>
+                <span id="errorText">Usuário ou senha incorretos</span>
+            </div>
+
+            <!-- Success Message -->
+            <div id="successMessage" class="hidden bg-green-500 bg-opacity-20 border border-green-500 border-opacity-50 text-white px-4 py-3 rounded-lg">
+                <i class="fas fa-check-circle mr-2"></i>
+                <span>Login realizado com sucesso! Redirecionando...</span>
+            </div>
+
+            <!-- Submit Button -->
+            <button 
+                type="submit" 
+                id="loginButton"
+                class="login-button w-full py-3 px-4 text-white font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-50 flex items-center justify-center"
+            >
+                <span id="buttonText">Entrar</span>
+                <div id="buttonSpinner" class="loading-spinner ml-3 hidden"></div>
+            </button>
+        </form>
+
+        <!-- Footer -->
+        <div class="mt-8 text-center">
+            <p class="text-white text-opacity-60 text-sm">
+                © 2024 Sistema DVR. Todos os direitos reservados.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            // Toggle password visibility
+            $('#togglePassword').click(function() {
+                const passwordField = $('#password');
+                const eyeIcon = $('#eyeIcon');
+                
+                if (passwordField.attr('type') === 'password') {
+                    passwordField.attr('type', 'text');
+                    eyeIcon.removeClass('fa-eye').addClass('fa-eye-slash');
+                } else {
+                    passwordField.attr('type', 'password');
+                    eyeIcon.removeClass('fa-eye-slash').addClass('fa-eye');
+                }
+            });
+
+            // Handle form submission
+            $('#loginForm').submit(function(e) {
+                e.preventDefault();
+                
+                // Hide error message
+                $('#errorMessage').addClass('hidden');
+                
+                // Show loading state
+                $('#loginButton').prop('disabled', true);
+                $('#buttonText').text('Entrando...');
+                $('#buttonSpinner').removeClass('hidden');
+                
+                // Get form data
+                const formData = {
+                    username: $('#username').val(),
+                    password: $('#password').val(),
+                    remember: $('#remember').is(':checked')
+                };
+                
+                // Send login request
+                $.ajax({
+                    url: '/api/auth/login',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(formData),
+                    success: function(response) {
+                        // Show success message
+                        $('#successMessage').removeClass('hidden');
+                        $('#loginForm').addClass('opacity-50');
+                        
+                        // Redirect after 1 second
+                        setTimeout(function() {
+                            // Check if there's a redirect URL
+                            const urlParams = new URLSearchParams(window.location.search);
+                            const redirect = urlParams.get('redirect') || '/dvr.html';
+                            window.location.href = redirect;
+                        }, 1000);
+                    },
+                    error: function(xhr) {
+                        // Reset button state
+                        $('#loginButton').prop('disabled', false);
+                        $('#buttonText').text('Entrar');
+                        $('#buttonSpinner').addClass('hidden');
+                        
+                        // Show error message
+                        const errorMsg = xhr.responseJSON?.message || 'Usuário ou senha incorretos';
+                        $('#errorText').text(errorMsg);
+                        $('#errorMessage').removeClass('hidden');
+                        
+                        // Add shake animation
+                        $('#loginForm').addClass('shake');
+                        setTimeout(function() {
+                            $('#loginForm').removeClass('shake');
+                        }, 500);
+                        
+                        // Clear password field
+                        $('#password').val('').focus();
+                    }
+                });
+            });
+
+            // Auto-focus username field
+            $('#username').focus();
+
+            // Handle Enter key in username field
+            $('#username').keypress(function(e) {
+                if (e.which === 13 && $(this).val()) {
+                    $('#password').focus();
+                    return false;
+                }
+            });
+
+            // Check if already logged in
+            $.ajax({
+                url: '/api/auth/check',
+                method: 'GET',
+                success: function(response) {
+                    if (response.authenticated) {
+                        // Already logged in, redirect
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const redirect = urlParams.get('redirect') || '/dvr.html';
+                        window.location.href = redirect;
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+database.db
+sessions.db
+
+# Recordings and media files
+recordings/
+*.ts
+*.m3u8
+*.mp4
+*.avi
+*.mkv
+*.mov
+*.webm
+*.flv
+*.vob
+*.ogv
+*.ogg
+*.wmv
+*.m4v
+*.mpg
+*.mpeg
+*.3gp
+
+# VOD files
+vod/
+vod_*.mp4
+dvr_*.ts
+live*.ts
+
+# Logs
+logs/
+*.log
+log.txt
+ffmpeg.log
+error.log
+access.log
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+*.iml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+
+# Build files
+dist/
+build/
+out/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Documentation
+docs/
+
+# Certificates (for HTTPS)
+*.pem
+*.key
+*.crt
+*.cer
+*.pfx
+*.p12
+
+# Backup files
+backup/
+backups/
+*.backup
+
+# Cache
+.cache/
+.npm/
+
+# Python (if any scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# Custom ignore
+test-files/
+debug/
+.test/

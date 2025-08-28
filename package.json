@@ -1,0 +1,45 @@
+{
+  "name": "rtsp-camera-system",
+  "version": "2.0.0",
+  "description": "Sistema completo de câmera RTSP com Live Stream e VOD",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "set DEBUG=true && node server.js",
+    "verbose": "set VERBOSE=true && node server.js",
+    "test": "node test-vod.js",
+    "monitor": "node monitor-vod.js",
+    "check": "node check-ffmpeg.js",
+    "debug": "node debug-rtsp.js",
+    "add-user": "node add-user.js",
+    "user:add": "node add-user.js"
+  },
+  "keywords": [
+    "rtsp",
+    "streaming",
+    "vod",
+    "camera",
+    "surveillance",
+    "hls",
+    "ffmpeg"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "chokidar": "^3.5.3",
+    "connect-sqlite3": "^0.9.16",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "express": "^4.18.2",
+    "express-session": "^1.18.2",
+    "sqlite3": "^5.1.7"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
+  }
+}
