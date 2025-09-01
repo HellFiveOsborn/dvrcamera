@@ -840,8 +840,9 @@
                 errorDisplay: false,
                 controls: true,
                 autoplay: true,
-                muted: true,
+                muted: false,              // Desmutar para ter áudio
                 preload: 'none',
+                volume: 1.0,               // Volume máximo
                 liveTracker: {
                     trackingThreshold: 0,
                     liveTolerance: 0.1
@@ -868,10 +869,24 @@
 
             // Carregar stream
             loadStream();
+            
+            // Tentar desmutar após iniciar (contorna políticas de autoplay)
+            player.ready(() => {
+                setTimeout(() => {
+                    player.muted(false);
+                    player.volume(1.0);
+                    console.log('[Player] Áudio desmutado');
+                }, 1000);
+            });
 
             // Event listeners
             player.on('playing', function() {
                 console.log('Player iniciado');
+                // Garantir que o áudio está desmutado
+                if (player.muted()) {
+                    player.muted(false);
+                    console.log('[Player] Desmutando áudio ao iniciar reprodução');
+                }
                 updateUI();
             });
 

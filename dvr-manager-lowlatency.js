@@ -48,11 +48,16 @@ class DVRManagerLowLatency {
             '-flags', 'low_delay',
             '-i', this.rtspUrl,
             
-            // Output 1: DVR (ULTRA OTIMIZADO MOBILE - mínimo CPU/bateria)
-            '-map', '0:v:0',           // Apenas primeiro stream de vídeo
-            '-map', '0:a:0?',          // Áudio opcional
+            // Output 1: DVR (OTIMIZADO MOBILE com áudio garantido)
+            '-map', '0:v:0',           // Primeiro stream de vídeo
+            '-map', '0:a?',            // TODOS os streams de áudio disponíveis
             '-c:v', 'copy',            // COPY DIRETO - ZERO CPU para vídeo!
-            '-c:a', 'copy',            // COPY DIRETO - ZERO CPU para áudio!
+            
+            // Áudio: tentar copy primeiro, fallback para AAC se necessário
+            '-c:a', 'aac',             // AAC para garantir compatibilidade
+            '-b:a', '128k',            // Bitrate de áudio adequado
+            '-ar', '44100',            // Sample rate padrão
+            '-ac', '2',                // Stereo
             
             // HLS otimizado para armazenamento
             '-f', 'hls',
@@ -66,11 +71,14 @@ class DVRManagerLowLatency {
             '-start_at_zero',
             dvrPlaylist,
             
-            // Output 2: Live (COPY DIRETO - latência mínima)
-            '-map', '0:v:0',           // Apenas vídeo principal
-            '-map', '0:a:0?',          // Áudio opcional
-            '-c:v', 'copy',            // COPY - sem recodificação
-            '-c:a', 'copy',            // COPY - sem recodificação
+            // Output 2: Live (COPY vídeo, AAC áudio para compatibilidade)
+            '-map', '0:v:0',           // Vídeo principal
+            '-map', '0:a?',            // Todos os áudios disponíveis
+            '-c:v', 'copy',            // COPY - sem recodificação de vídeo
+            '-c:a', 'aac',             // AAC para áudio (compatível com HLS)
+            '-b:a', '128k',            // Bitrate adequado
+            '-ar', '44100',            // Sample rate padrão
+            '-ac', '2',                // Stereo
             
             // HLS live otimizado
             '-f', 'hls',
@@ -85,8 +93,9 @@ class DVRManagerLowLatency {
         ];
 
         console.log('[DVRManager] Iniciando sistema unificado DVR + Live (Mobile Optimized)...');
-        console.log('[DVRManager] Modo: COPY direto (0% CPU para codificação)');
+        console.log('[DVRManager] Modo: COPY vídeo + AAC áudio (mínimo CPU)');
         console.log('[DVRManager] Segmentos DVR: ' + this.segmentDuration + 's | Live: 2s');
+        console.log('[DVRManager] Áudio: AAC 128kbps 44.1kHz Stereo');
         
         this.ffmpegProcess = spawn('ffmpeg', args, {
             // Otimizações de processo para mobile

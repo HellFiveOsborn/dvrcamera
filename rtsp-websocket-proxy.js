@@ -61,19 +61,24 @@ class RTSPWebSocketProxy {
             '-flags', 'low_delay',
             '-i', this.rtspUrl,
             
+            // Mapear streams explicitamente
+            '-map', '0:v:0',    // Primeiro stream de vídeo
+            '-map', '0:a?',     // Áudio se disponível
+            
             // Output - MPEG1 Video para JSMpeg
             '-f', 'mpegts',
             '-codec:v', 'mpeg1video',
-            '-b:v', '800k',  // Reduzido para economizar banda
-            '-r', '25',       // 25fps é suficiente
+            '-b:v', '800k',  // Bitrate de vídeo
+            '-r', '25',       // 25fps
             '-s', '640x480',
             '-bf', '0',
             
-            // Áudio MP2
+            // Áudio MP2 (compatível com JSMpeg)
             '-codec:a', 'mp2',
-            '-b:a', '96k',    // Reduzido para economizar banda
-            '-ar', '44100',
-            '-ac', '1',
+            '-b:a', '128k',    // Bitrate aumentado para melhor qualidade
+            '-ar', '44100',    // Sample rate padrão
+            '-ac', '2',        // Stereo para melhor qualidade
+            '-muxdelay', '0.001',
             
             // Flags de baixa latência
             '-strict', 'experimental',
