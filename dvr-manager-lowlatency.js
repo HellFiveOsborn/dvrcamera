@@ -63,25 +63,28 @@ class DVRManagerLowLatency {
             '-hls_playlist_type', 'event',
             dvrPlaylist,
             
-            // Output 2: Live (OTIMIZADO PARA CELULAR)
-            '-map', '0',
-            '-c:v', 'libx264',
-            '-preset', 'ultrafast',    // Ultrafast para mínimo CPU
-            '-tune', 'zerolatency',
-            '-crf', '28',              // CRF 28 para economizar espaço
-            '-g', '25',
-            '-sc_threshold', '0',
-            '-profile:v', 'baseline',  // Baseline para mobile
-            '-level', '3.0',
-            '-c:a', 'aac',
-            '-b:a', '48k',             // Áudio em 48k para live
-            '-ar', '22050',            // Sample rate reduzido
-            '-ac', '1',                // Mono
+            // Output 2: Live (EXTREME LOW LATENCY - <3s target)
+            '-map', '0',               // Mapear stream completo
+            '-c:v', 'copy',            // Copy direto do vídeo
+            '-c:a', 'copy',            // Copy direto do áudio
+            
+            // HLS EXTREMO - mínimo absoluto
             '-f', 'hls',
-            '-hls_time', '2',          // Segmentos de 2 segundos
-            '-hls_list_size', '5',     // 5 segmentos = 10 segundos
-            '-hls_flags', 'delete_segments',
+            '-hls_time', '1',          // Segmentos de 1 segundo
+            '-hls_list_size', '1',     // APENAS 1 segmento = 1 segundo total!
+            '-hls_flags', 'delete_segments+append_list+omit_endlist+temp_file',
+            '-hls_segment_type', 'mpegts',
             '-hls_segment_filename', path.join(this.recordingsDir, 'live%03d.ts'),
+            
+            // Flags EXTREMAS para entrega instantânea
+            '-fflags', 'nobuffer+genpts+discardcorrupt+flush_packets',
+            '-flags', 'low_delay',
+            '-avioflags', 'direct',
+            '-flush_packets', '1',
+            '-max_delay', '0',         // ZERO delay
+            '-muxdelay', '0',          // ZERO mux delay
+            '-muxpreload', '0',        // ZERO preload
+            
             livePlaylist
         ];
 
@@ -268,6 +271,11 @@ class DVRManagerLowLatency {
         console.log('[DVRManager] Parando sistema...');
         this.isRunning = false;
         
+        // Parar intervalo de limpeza
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+        }
+        
         if (this.ffmpegProcess) {
             this.ffmpegProcess.kill('SIGTERM');
         }
@@ -278,30 +286,83 @@ class DVRManagerLowLatency {
     }
 
     onNewSegment() {
-        // Limpar segmentos antigos
-        this.cleanOldSegments();
+        // Limpar segmentos antigos a cada 30 novos segmentos (10 minutos)
+        if (!this.segmentCounter) this.segmentCounter = 0;
+        this.segmentCounter++;
+        
+        if (this.segmentCounter >= 30) {
+            this.cleanOldSegments();
+            this.segmentCounter = 0;
+        }
     }
 
     cleanOldSegments() {
         try {
             const now = Date.now();
-            const maxAge = 48 * 60 * 60 * 1000; // 48 horas
+            const maxAge = 48 * 60 * 60 * 1000; // 48 horas em milissegundos
             
             const files = fs.readdirSync(this.recordingsDir);
             const tsFiles = files.filter(f => f.startsWith('dvr_') && f.endsWith('.ts'));
             
+            // Ordenar arquivos por número do segmento
+            tsFiles.sort((a, b) => {
+                const numA = parseInt(a.match(/dvr_(\d+)/)?.[1] || 0);
+                const numB = parseInt(b.match(/dvr_(\d+)/)?.[1] || 0);
+                return numA - numB;
+            });
+            
+            let removedCount = 0;
+            let totalSize = 0;
+            
+            // Método 1: Remover por idade (usando birthtime que é mais confiável)
             tsFiles.forEach(file => {
                 const filePath = path.join(this.recordingsDir, file);
-                const stats = fs.statSync(filePath);
-                const age = now - stats.mtimeMs;
-                
-                if (age > maxAge) {
-                    fs.unlinkSync(filePath);
-                    if (process.env.VERBOSE === 'true') {
-                        console.log(`[DVRManager] Segmento antigo removido: ${file}`);
+                try {
+                    const stats = fs.statSync(filePath);
+                    // Usar birthtime (tempo de criação) ao invés de mtime
+                    const age = now - stats.birthtimeMs;
+                    
+                    if (age > maxAge) {
+                        totalSize += stats.size;
+                        fs.unlinkSync(filePath);
+                        removedCount++;
+                    }
+                } catch (e) {
+                    // Se não conseguir ler o arquivo, tentar removê-lo
+                    try {
+                        fs.unlinkSync(filePath);
+                        removedCount++;
+                    } catch (e2) {
+                        // Ignorar
                     }
                 }
             });
+            
+            // Método 2: Limitar por número máximo de segmentos
+            // Com segmentos de 20s, 48h = 8640 segmentos
+            const maxSegmentsAllowed = Math.floor(this.maxDuration / this.segmentDuration);
+            
+            if (tsFiles.length > maxSegmentsAllowed) {
+                const segmentsToRemove = tsFiles.length - maxSegmentsAllowed;
+                const filesToRemove = tsFiles.slice(0, segmentsToRemove);
+                
+                filesToRemove.forEach(file => {
+                    const filePath = path.join(this.recordingsDir, file);
+                    try {
+                        const stats = fs.statSync(filePath);
+                        totalSize += stats.size;
+                        fs.unlinkSync(filePath);
+                        removedCount++;
+                    } catch (e) {
+                        // Ignorar erros
+                    }
+                });
+            }
+            
+            if (removedCount > 0) {
+                const sizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+                console.log(`[DVRManager] Limpeza: ${removedCount} segmentos removidos (${sizeMB} MB liberados)`);
+            }
             
             // Limpar segmentos live antigos (manter apenas os últimos 10)
             const liveFiles = files.filter(f => f.startsWith('live') && f.endsWith('.ts'));
@@ -314,16 +375,59 @@ class DVRManagerLowLatency {
                     }
                 });
             }
+            
+            // Atualizar playlist DVR para remover referências a arquivos deletados
+            this.updateDVRPlaylist();
+            
         } catch (error) {
-            // Silenciar erros de limpeza
+            console.error('[DVRManager] Erro na limpeza:', error.message);
+        }
+    }
+    
+    updateDVRPlaylist() {
+        try {
+            const playlistPath = path.join(this.recordingsDir, 'dvr.m3u8');
+            if (!fs.existsSync(playlistPath)) return;
+            
+            let content = fs.readFileSync(playlistPath, 'utf8');
+            const lines = content.split('\n');
+            const newLines = [];
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                
+                // Se é uma linha de segmento
+                if (line.endsWith('.ts')) {
+                    const segmentPath = path.join(this.recordingsDir, line);
+                    // Só incluir se o arquivo existe
+                    if (fs.existsSync(segmentPath)) {
+                        // Incluir a linha #EXTINF anterior também
+                        if (i > 0 && lines[i-1].startsWith('#EXTINF')) {
+                            newLines.push(lines[i-1]);
+                        }
+                        newLines.push(line);
+                    }
+                } else if (!line.startsWith('#EXTINF')) {
+                    // Incluir outras linhas de metadata
+                    newLines.push(line);
+                }
+            }
+            
+            fs.writeFileSync(playlistPath, newLines.join('\n'));
+        } catch (error) {
+            console.error('[DVRManager] Erro ao atualizar playlist:', error.message);
         }
     }
 
     startCleanup() {
-        // Limpar a cada hora
-        setInterval(() => {
+        // Limpeza inicial imediata
+        console.log('[DVRManager] Executando limpeza inicial de segmentos antigos...');
+        this.cleanOldSegments();
+        
+        // Limpar a cada 10 minutos (mais frequente para evitar acúmulo)
+        this.cleanupInterval = setInterval(() => {
             this.cleanOldSegments();
-        }, 60 * 60 * 1000);
+        }, 10 * 60 * 1000); // 10 minutos
     }
 
     getDVRInfo() {

@@ -9,6 +9,7 @@ const SQLiteStore = require('connect-sqlite3')(session);
 const config = require('./config');
 const DVRManagerLowLatency = require('./dvr-manager-lowlatency');
 const AuthManager = require('./auth-manager');
+const RTSPWebSocketProxy = require('./rtsp-websocket-proxy');
 
 // Criar diretório de gravações se não existir
 const recordingsDir = path.resolve(config.paths.recordings);
@@ -168,12 +169,16 @@ app.get('/api/auth/session', requireAuth, async (req, res) => {
 // Aplicar autenticação para arquivos estáticos protegidos
 app.use('/recordings', requireAuth, express.static(recordingsDir));
 app.use('/dvr.html', requireAuth, express.static(path.join(config.paths.public, 'dvr.html')));
+app.use('/dvr-websocket.html', requireAuth, express.static(path.join(config.paths.public, 'dvr-websocket.html')));
 
 // Servir outros arquivos públicos (CSS, JS, etc)
 app.use(express.static(path.resolve(config.paths.public)));
 
 // Inicializar DVR Manager com baixa latência
 const dvrManager = new DVRManagerLowLatency(config.camera.rtspUrl, recordingsDir, 10); // DVR com 10s, Live com 1s
+
+// Inicializar WebSocket Proxy para ultra baixa latência
+const wsProxy = new RTSPWebSocketProxy(config.camera.rtspUrl, 8081);
 
 // Rotas da API (protegidas)
 app.get('/api/status', requireAuth, (req, res) => {
@@ -252,10 +257,21 @@ app.get('/api/dvr/segments', requireAuth, (req, res) => {
     }
 });
 
+// Rota para verificar disponibilidade do WebSocket
+app.get('/api/ws/status', requireAuth, (req, res) => {
+    res.json({
+        available: wsProxy.isRunning(),
+        url: `ws://${req.hostname}:8081`,
+        clients: wsProxy.getClientCount(),
+        transport: 'mpeg1video',
+        latency: '< 1 segundo'
+    });
+});
+
 // Rota principal
 app.get('/', (req, res) => {
     if (req.session && req.session.userId) {
-        res.redirect('/dvr.html');
+        res.redirect('/dvr-websocket.html');
     } else {
         res.redirect('/login.html');
     }
@@ -285,6 +301,10 @@ function startServices() {
     console.log('[Server] Iniciando sistema DVR...');
     dvrManager.start();
     
+    // Iniciar WebSocket Proxy
+    console.log('[Server] Iniciando WebSocket Proxy para ultra baixa latência...');
+    wsProxy.start();
+    
     // Iniciar servidor HTTP
     server.listen(config.server.port, () => {
         console.log('');
@@ -292,13 +312,15 @@ function startServices() {
         console.log('║      SISTEMA DVR INICIADO COM SUCESSO      ║');
         console.log('╚═══════════════════════════════════════════╝');
         console.log('');
-        console.log(`📺 Interface DVR: http://localhost:${config.server.port}/dvr.html`);
+        console.log(`📺 Interface DVR: http://localhost:${config.server.port}/dvr-websocket.html`);
         console.log(`📊 API Status: http://localhost:${config.server.port}/api/status`);
         console.log(`💚 Health Check: http://localhost:${config.server.port}/api/health`);
         console.log(`📹 DVR Info: http://localhost:${config.server.port}/api/dvr/info`);
+        console.log(`🚀 WebSocket Stream: ws://localhost:8081`);
         console.log('');
         console.log('⚡ Performance:');
-        console.log('  • Live Stream: < 2 segundos de latência');
+        console.log('  • WebSocket Stream: < 1 segundo de latência (ultra baixa)');
+        console.log('  • HLS Stream: < 2 segundos de latência (fallback)');
         console.log('  • DVR: Buffer de 48 horas');
         console.log('  • Dual Mode: Live + DVR simultâneos');
         console.log('');
@@ -321,6 +343,7 @@ process.on('SIGINT', () => {
     console.log('╚═══════════════════════════════════════════╝');
     
     dvrManager.stop();
+    wsProxy.stop();
     authManager.close();
     
     server.close(() => {

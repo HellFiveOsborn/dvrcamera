@@ -306,22 +306,30 @@
                     vhs: {
                         overrideNative: true,
                         withCredentials: false,
-                        // Configurações balanceadas para estabilidade e baixa latência
-                        maxBufferLength: 10, // 10 segundos de buffer
-                        maxBufferSize: 10 * 1024 * 1024, // 10MB buffer
-                        bufferBasedABR: true,
+                        // CONFIGURAÇÕES ABSOLUTE MINIMUM (<3s target)
+                        maxBufferLength: isLive ? 0.3 : 10, // 0.3 segundos para live (MÍNIMO ABSOLUTO)
+                        maxBufferSize: isLive ? 1 * 1024 * 1024 : 10 * 1024 * 1024, // 1MB live, 10MB DVR
+                        // Configurações NO LIMITE para latência mínima
+                        experimentalLLHLS: true, // Low Latency HLS
+                        liveSyncDuration: 0, // ZERO sync delay
+                        liveMaxLatencyDuration: 1, // Máximo 1 segundo de latência
+                        // Buffer ZERO ABSOLUTO
+                        backBufferLength: 0, // SEM buffer traseiro
+                        maxMaxBufferLength: 0.5, // Máximo absoluto de 0.5 segundo
+                        targetDuration: 0.1, // Target de 0.1 segundos
+                        goalBufferLength: 0.1, // Buffer goal de 0.1 segundos
+                        // Configurações agressivas
+                        overrideNative: true,
+                        allowSeeksWithinUnsafeLiveWindow: true,
+                        liveRangeSafeTimeDelta: 0.5,
+                        handlePartialData: true,
                         enableLowInitialPlaylist: true,
-                        fastQualityChange: true,
-                        handleManifestRedirects: true,
-                        smoothQualityChange: true,
-                        bandwidth: 5000000, // 5 Mbps inicial
-                        // Configurações de latência
-                        experimentalBufferBasedABR: false,
-                        experimentalLLHLS: false,
-                        liveSyncDuration: 3, // Sincronizar com 3 segundos do live
-                        liveMaxLatencyDuration: 10, // Máximo 10 segundos de latência
-                        playbackRates: [0.5, 1, 1.5, 2],
-                        useBandwidthFromLocalStorage: true
+                        smoothQualityChange: false,
+                        bandwidth: 100000000, // 100 Mbps
+                        // Configurações adicionais para reduzir latência
+                        nudgeMaxRetry: 10,
+                        nudgeOffset: 0.1,
+                        stallDebounceDelay: 100
                     }
                 },
                 liveui: false,
@@ -330,11 +338,11 @@
                 controls: true,
                 autoplay: true,
                 muted: true,
-                preload: 'none', // Não pre-carregar para começar do edge
+                preload: 'none',
                 // Configurações adicionais para baixa latência
                 liveTracker: {
                     trackingThreshold: 0,
-                    liveTolerance: 0.5
+                    liveTolerance: 0.1 // Tolerância mínima
                 },
                 // Desabilitar controles que podem atrasar
                 playbackRates: false,
@@ -381,62 +389,119 @@
                     });
                     
                     if (isLive) {
-                        // Para live, ir próximo ao final
+                        // Para live, ir ao EDGE TOTAL (0 buffer)
                         player.one('loadedmetadata', function() {
-                            const duration = player.duration();
-                            if (duration && duration !== Infinity && !isNaN(duration) && duration > 0) {
-                                // Posicionar com 3 segundos de margem para estabilidade
-                                const targetTime = Math.max(0, duration - 3);
-                                player.currentTime(targetTime);
+                            if (isLive) {
+                                const duration = player.duration();
+                                if (duration && duration !== Infinity && !isNaN(duration)) {
+                                    // Ir para O FINAL ABSOLUTO (0.1s do edge)
+                                    const targetTime = duration - 0.1;
+                                    player.currentTime(targetTime);
+                                    console.log('[Live] EDGE TOTAL:', targetTime, 'de', duration);
+                                }
                             }
                         });
                         
-                        // Sincronização APENAS quando estiver em modo LIVE
-                        setInterval(() => {
-                            // IMPORTANTE: Só sincronizar se estiver REALMENTE em modo live
-                            // E NÃO sincronizar automaticamente
-                            if (isLive && player && player.readyState() >= 2) {
+                        // Acelerar AGRESSIVAMENTE no início
+                        player.on('play', function() {
+                            if (isLive) {
+                                // Acelerar 20% por 3 segundos para alcançar rapidamente
+                                player.playbackRate(1.2);
+                                setTimeout(() => {
+                                    player.playbackRate(1.0);
+                                }, 3000);
+                            }
+                        });
+                        
+                        // Forçar edge SEMPRE ao carregar dados
+                        player.on('loadeddata', function() {
+                            if (isLive) {
+                                const duration = player.duration();
+                                if (duration && duration !== Infinity) {
+                                    player.currentTime(duration - 0.1);
+                                }
+                            }
+                        });
+                        
+                        // Forçar edge ao buscar
+                        player.on('seeking', function() {
+                            if (isLive) {
+                                const duration = player.duration();
+                                if (duration && duration !== Infinity) {
+                                    player.currentTime(duration - 0.1);
+                                }
+                            }
+                        });
+                        
+                        // Sincronização MÁXIMA - Colar no edge absoluto
+                        let syncInterval = setInterval(() => {
+                            if (isLive && player && !player.paused() && player.readyState() >= 2) {
                                 try {
                                     const duration = player.duration();
                                     const current = player.currentTime();
                                     
                                     if (duration && duration !== Infinity && !isNaN(duration) &&
-                                        current !== undefined && !isNaN(current) && duration > 0) {
-                                        
+                                        current !== undefined && !isNaN(current)) {
                                         const delay = duration - current;
-                                        // Só sincronizar se estiver EXTREMAMENTE atrás (mais de 60 segundos)
-                                        // E apenas quando em modo live explícito
-                                        if (delay > 60 && isLive) {
-                                            const targetTime = Math.max(0, duration - 3);
+                                        
+                                        // Se tiver QUALQUER delay significativo, pular direto
+                                        if (delay > 1.5) {
+                                            const targetTime = duration - 0.1;
                                             player.currentTime(targetTime);
-                                            console.log('[Live] Re-sincronizando - delay extremo:', delay.toFixed(1) + 's');
+                                            console.log('[Live] JUMP TO EDGE - delay:', delay.toFixed(1) + 's');
+                                        }
+                                        // Se estiver entre 0.5-1.5 segundos, acelerar MUITO
+                                        else if (delay > 0.5 && delay <= 1.5) {
+                                            if (player.playbackRate() <= 1.1) {
+                                                player.playbackRate(1.2); // 20% mais rápido
+                                                setTimeout(() => {
+                                                    player.playbackRate(1.0);
+                                                }, 800);
+                                            }
+                                        }
+                                        // Se estiver entre 0.2-0.5 segundo, acelerar um pouco
+                                        else if (delay > 0.2 && delay <= 0.5) {
+                                            if (player.playbackRate() === 1) {
+                                                player.playbackRate(1.1); // 10% mais rápido
+                                                setTimeout(() => {
+                                                    player.playbackRate(1.0);
+                                                }, 300);
+                                            }
                                         }
                                     }
                                 } catch (e) {
                                     console.debug('Erro ao sincronizar:', e);
                                 }
+                                
+                                updateLatencyInfo();
                             }
-                        }, 30000); // Verificar apenas a cada 30 segundos
+                        }, 250); // Verificar a cada 250ms (4x por segundo!)
                         
-                        // Forçar sincronização com live edge (se disponível)
+                        // Limpar intervalo ao destruir player
+                        player.on('dispose', () => clearInterval(syncInterval));
+                        
+                        // Sincronização suave ao dar play
                         player.on('play', function() {
                             if (isLive && player.readyState() >= 2) {
                                 setTimeout(() => {
                                     try {
                                         const duration = player.duration();
                                         if (duration && duration !== Infinity && !isNaN(duration) && duration > 0) {
-                                            const targetTime = Math.max(0, duration - 0.1);
+                                            const targetTime = Math.max(0, duration - 1.5);
                                             player.currentTime(targetTime);
                                         }
                                     } catch (e) {
                                         console.debug('Erro ao sincronizar no play:', e);
                                     }
-                                }, 100);
+                                }, 500); // Pequeno delay para estabilizar
                             }
                         });
+                        
+                        // NÃO pular automaticamente em waiting (causa os pulos de segundos)
+                        // Deixar o player gerenciar o buffer naturalmente
                     }
                     
-                    $('#system-status').text('Conectado (Low Latency)').removeClass('text-red-400').addClass('text-green-400');
+                    $('#system-status').text('Conectado (Ultra Low Latency)').removeClass('text-red-400').addClass('text-green-400');
                     
                     // Mostrar informações de latência
                     updateLatencyInfo();
@@ -462,10 +527,10 @@
                             const latencyStr = latency.toFixed(1);
                             $('#system-status').text(`Conectado (Latência: ${latencyStr}s)`);
                             
-                            // Ajustar cor baseado na latência
-                            if (latency < 2) {
+                            // Ajustar cor baseado na latência target (3-4s)
+                            if (latency <= 3) {
                                 $('#system-status').removeClass('text-yellow-400 text-red-400').addClass('text-green-400');
-                            } else if (latency < 5) {
+                            } else if (latency <= 4) {
                                 $('#system-status').removeClass('text-green-400 text-red-400').addClass('text-yellow-400');
                             } else {
                                 $('#system-status').removeClass('text-green-400 text-yellow-400').addClass('text-red-400');
