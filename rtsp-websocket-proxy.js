@@ -51,36 +51,45 @@ class RTSPWebSocketProxy {
 
         // FFmpeg para converter RTSP em MPEG1 Video (formato que funciona no browser)
         const args = [
-            // Input
+            // Input com tratamento de erros H264
             '-rtsp_transport', 'tcp',
+            '-rtsp_flags', 'prefer_tcp',
+            '-analyzeduration', '1000000',
+            '-probesize', '1000000',
+            '-err_detect', 'ignore_err',  // Ignorar erros de decodificação
+            '-fflags', '+nobuffer+genpts+igndts+discardcorrupt',
+            '-flags', 'low_delay',
             '-i', this.rtspUrl,
             
             // Output - MPEG1 Video para JSMpeg
             '-f', 'mpegts',
             '-codec:v', 'mpeg1video',
-            '-b:v', '1000k',
-            '-r', '30',
+            '-b:v', '800k',  // Reduzido para economizar banda
+            '-r', '25',       // 25fps é suficiente
             '-s', '640x480',
             '-bf', '0',
             
-            // Áudio PCM
+            // Áudio MP2
             '-codec:a', 'mp2',
-            '-b:a', '128k',
+            '-b:a', '96k',    // Reduzido para economizar banda
             '-ar', '44100',
             '-ac', '1',
             
-            // Sem buffer, direto para stdout
-            '-fflags', 'nobuffer',
-            '-flags', 'low_delay',
+            // Flags de baixa latência
             '-strict', 'experimental',
             '-max_delay', '0',
             '-max_interleave_delta', '0',
+            '-avoid_negative_ts', 'make_zero',
             
             // Output para pipe
             'pipe:1'
         ];
 
-        this.ffmpegProcess = spawn('ffmpeg', args);
+        this.ffmpegProcess = spawn('ffmpeg', args, {
+            // Configurações do processo
+            stdio: ['ignore', 'pipe', 'pipe'],
+            detached: false
+        });
 
         // Enviar dados para todos os clientes WebSocket
         this.ffmpegProcess.stdout.on('data', (data) => {
@@ -89,14 +98,32 @@ class RTSPWebSocketProxy {
 
         this.ffmpegProcess.stderr.on('data', (data) => {
             const message = data.toString();
-            if (message.includes('error')) {
-                console.error('[FFmpeg Error]:', message);
+            // Filtrar apenas erros críticos (ignorar warnings de H264)
+            if (message.includes('error') &&
+                !message.includes('decode_slice_header') &&
+                !message.includes('Missing reference picture')) {
+                console.error('[FFmpeg Error]:', message.trim());
             }
+        });
+
+        this.ffmpegProcess.on('error', (error) => {
+            console.error('[FFmpeg] Erro ao iniciar processo:', error);
+            this.ffmpegProcess = null;
         });
 
         this.ffmpegProcess.on('close', (code) => {
             console.log(`[FFmpeg] Processo encerrado com código ${code}`);
             this.ffmpegProcess = null;
+            
+            // Reiniciar automaticamente se houver clientes conectados
+            if (this.clients.size > 0 && this.running) {
+                console.log('[FFmpeg] Reiniciando stream em 2 segundos...');
+                setTimeout(() => {
+                    if (this.clients.size > 0 && this.running) {
+                        this.startFFmpegStream();
+                    }
+                }, 2000);
+            }
         });
     }
 

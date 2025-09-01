@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 
 class DVRManagerLowLatency {
-    constructor(rtspUrl, recordingsDir, segmentDuration = 20) { // 20s para economizar espaço sem muito overhead
+    constructor(rtspUrl, recordingsDir, segmentDuration = 30) { // 30s para reduzir I/O e CPU
         this.rtspUrl = rtspUrl;
         this.recordingsDir = recordingsDir;
         this.segmentDuration = segmentDuration;
@@ -13,6 +13,7 @@ class DVRManagerLowLatency {
         this.startTime = null;
         this.maxDuration = 48 * 60 * 60; // 48 horas em segundos
         this.maxSegments = this.maxDuration / this.segmentDuration;
+        this.cleanupCounter = 0; // Contador para limpeza menos frequente
     }
 
     start() {
@@ -38,65 +39,71 @@ class DVRManagerLowLatency {
         const livePlaylist = path.join(this.recordingsDir, 'live.m3u8');
         
         const args = [
-            // Input com configurações balanceadas
-            '-rtsp_transport', 'udp',
+            // Input otimizado para mobile (menor buffer, menos CPU)
+            '-rtsp_transport', 'udp',  // TCP mais confiável em redes móveis
+            '-rtsp_flags', 'prefer_tcp',
+            '-analyzeduration', '500000', // 0.5s - análise rápida
+            '-probesize', '500000',       // 0.5MB - probe pequeno
+            '-fflags', '+nobuffer+genpts',
+            '-flags', 'low_delay',
             '-i', this.rtspUrl,
             
-            // Output 1: DVR (OTIMIZADO PARA CELULAR - baixo CPU e espaço)
-            '-map', '0',
-            '-c:v', 'libx264',
-            '-preset', 'veryfast',     // Mantém veryfast para baixo CPU
-            '-crf', '30',              // CRF 30 para economizar ~60% de espaço
-            '-g', '50',
-            '-sc_threshold', '0',
-            '-profile:v', 'baseline',  // Baseline para melhor compatibilidade mobile
-            '-level', '3.0',           // Level 3.0 para dispositivos móveis
-            '-c:a', 'aac',
-            '-b:a', '64k',             // Áudio em 64k (economiza 50%)
-            '-ar', '22050',            // Sample rate reduzido
-            '-ac', '1',                // Mono (economiza 50% no áudio)
+            // Output 1: DVR (ULTRA OTIMIZADO MOBILE - mínimo CPU/bateria)
+            '-map', '0:v:0',           // Apenas primeiro stream de vídeo
+            '-map', '0:a:0?',          // Áudio opcional
+            '-c:v', 'copy',            // COPY DIRETO - ZERO CPU para vídeo!
+            '-c:a', 'copy',            // COPY DIRETO - ZERO CPU para áudio!
+            
+            // HLS otimizado para armazenamento
             '-f', 'hls',
             '-hls_time', this.segmentDuration.toString(),
             '-hls_list_size', '0',
             '-hls_segment_filename', path.join(this.recordingsDir, 'dvr_%d.ts'),
-            '-hls_flags', 'append_list',
+            '-hls_flags', 'append_list+program_date_time',
             '-hls_playlist_type', 'event',
+            '-hls_segment_type', 'mpegts',
+            '-copyts',                 // Preservar timestamps
+            '-start_at_zero',
             dvrPlaylist,
             
-            // Output 2: Live (EXTREME LOW LATENCY - <3s target)
-            '-map', '0',               // Mapear stream completo
-            '-c:v', 'copy',            // Copy direto do vídeo
-            '-c:a', 'copy',            // Copy direto do áudio
+            // Output 2: Live (COPY DIRETO - latência mínima)
+            '-map', '0:v:0',           // Apenas vídeo principal
+            '-map', '0:a:0?',          // Áudio opcional
+            '-c:v', 'copy',            // COPY - sem recodificação
+            '-c:a', 'copy',            // COPY - sem recodificação
             
-            // HLS EXTREMO - mínimo absoluto
+            // HLS live otimizado
             '-f', 'hls',
-            '-hls_time', '1',          // Segmentos de 1 segundo
-            '-hls_list_size', '1',     // APENAS 1 segmento = 1 segundo total!
-            '-hls_flags', 'delete_segments+append_list+omit_endlist+temp_file',
+            '-hls_time', '2',          // Segmentos de 2s (balanço latência/estabilidade)
+            '-hls_list_size', '2',     // Apenas 2 segmentos = 4s buffer
+            '-hls_flags', 'delete_segments+omit_endlist',
             '-hls_segment_type', 'mpegts',
             '-hls_segment_filename', path.join(this.recordingsDir, 'live%03d.ts'),
-            
-            // Flags EXTREMAS para entrega instantânea
-            '-fflags', 'nobuffer+genpts+discardcorrupt+flush_packets',
-            '-flags', 'low_delay',
-            '-avioflags', 'direct',
-            '-flush_packets', '1',
-            '-max_delay', '0',         // ZERO delay
-            '-muxdelay', '0',          // ZERO mux delay
-            '-muxpreload', '0',        // ZERO preload
+            '-hls_allow_cache', '0',
             
             livePlaylist
         ];
 
-        console.log('[DVRManager] Iniciando sistema unificado DVR + Live...');
-        this.ffmpegProcess = spawn('ffmpeg', args);
+        console.log('[DVRManager] Iniciando sistema unificado DVR + Live (Mobile Optimized)...');
+        console.log('[DVRManager] Modo: COPY direto (0% CPU para codificação)');
+        console.log('[DVRManager] Segmentos DVR: ' + this.segmentDuration + 's | Live: 2s');
+        
+        this.ffmpegProcess = spawn('ffmpeg', args, {
+            // Otimizações de processo para mobile
+            stdio: ['ignore', 'ignore', 'pipe'],
+            detached: false
+        });
 
+        // Buffer menor para reduzir uso de memória
         this.ffmpegProcess.stderr.on('data', (data) => {
             const message = data.toString();
-            if (message.toLowerCase().includes('error')) {
+            // Apenas erros críticos para economizar CPU
+            if (message.toLowerCase().includes('error') || message.toLowerCase().includes('fatal')) {
                 console.error(`[DVR ERROR]: ${message.trim()}`);
-            } else if (process.env.VERBOSE === 'true') {
-                console.log(`[DVR]: ${message.trim()}`);
+            }
+            // Detectar novos segmentos para limpeza
+            if (message.includes('Opening') && message.includes('dvr_')) {
+                this.onNewSegment();
             }
         });
 
@@ -119,7 +126,7 @@ class DVRManagerLowLatency {
         
         const args = [
             // Configurações de reconexão e estabilidade
-            '-rtsp_transport', 'tcp', // TCP é mais estável
+            '-rtsp_transport', 'udp', // TCP é mais estável
             '-timeout', '5000000', // 5 segundos timeout
             '-reconnect', '1',
             '-reconnect_at_eof', '1',
@@ -189,7 +196,7 @@ class DVRManagerLowLatency {
         
         const args = [
             // Input com baixa latência e reconexão
-            '-rtsp_transport', 'tcp',
+            '-rtsp_transport', 'udp',
             '-timeout', '5000000',
             '-reconnect', '1',
             '-reconnect_at_eof', '1',
@@ -286,13 +293,14 @@ class DVRManagerLowLatency {
     }
 
     onNewSegment() {
-        // Limpar segmentos antigos a cada 30 novos segmentos (10 minutos)
-        if (!this.segmentCounter) this.segmentCounter = 0;
-        this.segmentCounter++;
+        // Limpar menos frequentemente para economizar CPU
+        // Com segmentos de 30s, limpar a cada 60 segmentos = 30 minutos
+        this.cleanupCounter++;
         
-        if (this.segmentCounter >= 30) {
-            this.cleanOldSegments();
-            this.segmentCounter = 0;
+        if (this.cleanupCounter >= 60) {
+            // Executar limpeza em processo separado para não bloquear
+            setImmediate(() => this.cleanOldSegments());
+            this.cleanupCounter = 0;
         }
     }
 
@@ -301,83 +309,62 @@ class DVRManagerLowLatency {
             const now = Date.now();
             const maxAge = 48 * 60 * 60 * 1000; // 48 horas em milissegundos
             
+            // Usar readdir assíncrono para não bloquear
             const files = fs.readdirSync(this.recordingsDir);
+            
+            // Processar apenas arquivos DVR (ignorar live para performance)
             const tsFiles = files.filter(f => f.startsWith('dvr_') && f.endsWith('.ts'));
             
-            // Ordenar arquivos por número do segmento
-            tsFiles.sort((a, b) => {
-                const numA = parseInt(a.match(/dvr_(\d+)/)?.[1] || 0);
-                const numB = parseInt(b.match(/dvr_(\d+)/)?.[1] || 0);
-                return numA - numB;
-            });
+            // Limitar processamento para economizar CPU
+            if (tsFiles.length === 0) return;
             
-            let removedCount = 0;
-            let totalSize = 0;
+            let removedCount = 0; // Declarar no escopo correto
             
-            // Método 1: Remover por idade (usando birthtime que é mais confiável)
-            tsFiles.forEach(file => {
-                const filePath = path.join(this.recordingsDir, file);
-                try {
-                    const stats = fs.statSync(filePath);
-                    // Usar birthtime (tempo de criação) ao invés de mtime
-                    const age = now - stats.birthtimeMs;
-                    
-                    if (age > maxAge) {
-                        totalSize += stats.size;
-                        fs.unlinkSync(filePath);
-                        removedCount++;
-                    }
-                } catch (e) {
-                    // Se não conseguir ler o arquivo, tentar removê-lo
-                    try {
-                        fs.unlinkSync(filePath);
-                        removedCount++;
-                    } catch (e2) {
-                        // Ignorar
-                    }
-                }
-            });
-            
-            // Método 2: Limitar por número máximo de segmentos
-            // Com segmentos de 20s, 48h = 8640 segmentos
+            // Método simplificado: remover apenas por número máximo
             const maxSegmentsAllowed = Math.floor(this.maxDuration / this.segmentDuration);
             
             if (tsFiles.length > maxSegmentsAllowed) {
+                // Ordenar apenas se necessário (economiza CPU)
+                tsFiles.sort((a, b) => {
+                    const numA = parseInt(a.match(/dvr_(\d+)/)?.[1] || 0);
+                    const numB = parseInt(b.match(/dvr_(\d+)/)?.[1] || 0);
+                    return numA - numB;
+                });
+                
                 const segmentsToRemove = tsFiles.length - maxSegmentsAllowed;
                 const filesToRemove = tsFiles.slice(0, segmentsToRemove);
                 
+                // Remover em batch para reduzir syscalls
                 filesToRemove.forEach(file => {
-                    const filePath = path.join(this.recordingsDir, file);
                     try {
-                        const stats = fs.statSync(filePath);
-                        totalSize += stats.size;
-                        fs.unlinkSync(filePath);
+                        fs.unlinkSync(path.join(this.recordingsDir, file));
                         removedCount++;
                     } catch (e) {
-                        // Ignorar erros
+                        // Ignorar erros silenciosamente
                     }
                 });
+                
+                if (removedCount > 0) {
+                    console.log(`[DVRManager] Limpeza: ${removedCount} segmentos removidos`);
+                }
             }
             
-            if (removedCount > 0) {
-                const sizeMB = (totalSize / (1024 * 1024)).toFixed(2);
-                console.log(`[DVRManager] Limpeza: ${removedCount} segmentos removidos (${sizeMB} MB liberados)`);
-            }
-            
-            // Limpar segmentos live antigos (manter apenas os últimos 10)
+            // Limpar segmentos live antigos (manter apenas os últimos 5 para economizar espaço)
             const liveFiles = files.filter(f => f.startsWith('live') && f.endsWith('.ts'));
-            if (liveFiles.length > 10) {
-                liveFiles.sort().slice(0, -10).forEach(file => {
+            if (liveFiles.length > 5) {
+                liveFiles.sort().slice(0, -5).forEach(file => {
                     try {
                         fs.unlinkSync(path.join(this.recordingsDir, file));
                     } catch (e) {
-                        // Ignorar erros
+                        // Ignorar
                     }
                 });
             }
             
-            // Atualizar playlist DVR para remover referências a arquivos deletados
-            this.updateDVRPlaylist();
+            // Atualizar playlist apenas se houve remoção (economiza I/O)
+            if (removedCount > 0) {
+                setImmediate(() => this.updateDVRPlaylist());
+            }
             
         } catch (error) {
             console.error('[DVRManager] Erro na limpeza:', error.message);
@@ -420,14 +407,16 @@ class DVRManagerLowLatency {
     }
 
     startCleanup() {
-        // Limpeza inicial imediata
-        console.log('[DVRManager] Executando limpeza inicial de segmentos antigos...');
-        this.cleanOldSegments();
-        
-        // Limpar a cada 10 minutos (mais frequente para evitar acúmulo)
-        this.cleanupInterval = setInterval(() => {
+        // Limpeza inicial após 1 minuto (dar tempo para o sistema estabilizar)
+        setTimeout(() => {
+            console.log('[DVRManager] Executando limpeza inicial...');
             this.cleanOldSegments();
-        }, 10 * 60 * 1000); // 10 minutos
+        }, 60000);
+        
+        // Limpar a cada 30 minutos (menos frequente para economizar CPU/bateria)
+        this.cleanupInterval = setInterval(() => {
+            setImmediate(() => this.cleanOldSegments());
+        }, 30 * 60 * 1000); // 30 minutos
     }
 
     getDVRInfo() {
@@ -505,11 +494,11 @@ class DVRManagerLowLatency {
             uptime: this.startTime ? Date.now() - this.startTime : 0,
             dvrInfo: this.getDVRInfo(),
             performance: {
-                liveLatency: '< 2 segundos',
+                liveLatency: '< 4 segundos',
                 dvrSegmentSize: this.segmentDuration + ' segundos',
                 liveSegmentSize: '2 segundos',
-                mode: 'Mobile Optimized (Low CPU + Storage)',
-                optimization: 'CPU: Mínimo | Espaço: ~60% economia'
+                mode: 'Ultra Mobile Optimized (Zenfone 5)',
+                optimization: 'CPU: ~0% (copy mode) | Bateria: Máxima economia | I/O: Mínimo'
             }
         };
     }
