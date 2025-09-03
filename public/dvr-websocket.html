@@ -190,6 +190,36 @@
             z-index: 100;
         }
         
+        .timeline-thumbnail {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%) translateY(-10px);
+            width: 160px;
+            height: 90px;
+            background: #000;
+            border: 2px solid rgba(251, 191, 36, 0.8);
+            border-radius: 4px;
+            display: none;
+            z-index: 101;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+        }
+        
+        .timeline-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 2px;
+        }
+        
+        .timeline-thumbnail.loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 12px;
+        }
+        
         .timeline-tooltip::after {
             content: '';
             position: absolute;
@@ -395,6 +425,187 @@
         .video-js .vjs-custom-spacer {
             flex: 1;
         }
+        
+        /* Playlist Plugin Styles */
+        .video-js .vjs-playlist-button {
+            width: auto !important;
+            min-width: 3em;
+            margin: 0 0.3em;
+        }
+        
+        .video-js .vjs-playlist-button .vjs-icon-placeholder {
+            display: none !important;
+        }
+        
+        .video-js .vjs-playlist-button .fa-list {
+            font-size: 16px;
+            line-height: 1;
+        }
+        
+        /* Playlist Sidebar */
+        .vjs-playlist-sidebar {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 320px;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 100;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .vjs-playlist-sidebar.open {
+            transform: translateX(0);
+        }
+        
+        .vjs-playlist-header {
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.8);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .vjs-playlist-header h3 {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .vjs-playlist-close {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        
+        .vjs-playlist-close:hover {
+            opacity: 1;
+        }
+        
+        .vjs-playlist-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        
+        .vjs-playlist-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+            border: 1px solid transparent;
+        }
+        
+        .vjs-playlist-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .vjs-playlist-item.active {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.5);
+        }
+        
+        .vjs-playlist-thumbnail {
+            width: 120px;
+            height: 68px;
+            background: #000;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-right: 12px;
+            position: relative;
+            flex-shrink: 0;
+        }
+        
+        .vjs-playlist-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .vjs-playlist-thumbnail .placeholder {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 12px;
+        }
+        
+        .vjs-playlist-info {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .vjs-playlist-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: #fff;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .vjs-playlist-time {
+            font-size: 11px;
+            color: #999;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .vjs-playlist-time .fa-clock {
+            font-size: 10px;
+        }
+        
+        .vjs-playlist-duration {
+            font-size: 11px;
+            color: #666;
+            margin-top: 2px;
+        }
+        
+        /* Scrollbar styling */
+        .vjs-playlist-content::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .vjs-playlist-content::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .vjs-playlist-content::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+        
+        .vjs-playlist-content::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -468,6 +679,9 @@
                         <div id="timeline-gaps"></div>
                         <div class="timeline-marker" id="timeline-marker"></div>
                         <div class="timeline-tooltip" id="timeline-tooltip"></div>
+                        <div class="timeline-thumbnail" id="timeline-thumbnail">
+                            <img id="timeline-thumbnail-img" src="" alt="Preview">
+                        </div>
                         <div class="timeline-click-indicator" id="timeline-click-indicator"></div>
                         <div id="timeline-ticks"></div>
                     </div>
@@ -513,6 +727,8 @@
         let maxDuration = 0;
         let updateInterval;
         let wsCheckInterval;
+        let thumbnailCache = new Map();
+        let thumbnailLoadTimeout = null;
 
         // Verificar disponibilidade do WebSocket
         async function checkWebSocketAvailability() {
@@ -803,10 +1019,37 @@
                 }
             }
             
+            // Playlist Button Component
+            class PlaylistButton extends videojs.getComponent('Button') {
+                constructor(player, options) {
+                    super(player, options);
+                    this.controlText('Playlist de Segmentos');
+                    this.addClass('vjs-playlist-button');
+                    
+                    // Adicionar ícone FontAwesome
+                    const root = this.el();
+                    const faIcon = document.createElement('i');
+                    faIcon.className = 'fa-solid fa-list';
+                    root.appendChild(faIcon);
+                }
+                
+                handleClick() {
+                    // Toggle playlist sidebar
+                    const sidebar = document.querySelector('.vjs-playlist-sidebar');
+                    if (sidebar) {
+                        sidebar.classList.toggle('open');
+                        if (sidebar.classList.contains('open')) {
+                            loadPlaylistItems();
+                        }
+                    }
+                }
+            }
+            
             // Registrar componentes
             videojs.registerComponent('LiveStatusButton', LiveStatusButton);
             videojs.registerComponent('CustomSpacer', CustomSpacer);
             videojs.registerComponent('DVRMenuButton', DVRMenuButton);
+            videojs.registerComponent('PlaylistButton', PlaylistButton);
             
             player = videojs('dvr-player', {
                 techOrder: ['html5'],
@@ -862,11 +1105,15 @@
                         'progressControl',
                         { name: 'CustomSpacer' },
                         { name: 'DVRMenuButton' },
+                        { name: 'PlaylistButton' },
                         'fullscreenToggle'
                     ]
                 }
             });
 
+            // Criar sidebar de playlist
+            createPlaylistSidebar();
+            
             // Carregar stream
             loadStream();
             
@@ -897,6 +1144,268 @@
 
             player.on('timeupdate', function() {
                 updateTimeDisplay();
+            });
+        }
+        
+        // Função para criar a sidebar de playlist
+        function createPlaylistSidebar() {
+            const playerEl = player ? player.el() : document.getElementById('dvr-player');
+            if (!playerEl) return;
+            
+            // Verificar se já existe
+            if (document.querySelector('.vjs-playlist-sidebar')) return;
+            
+            const sidebar = document.createElement('div');
+            sidebar.className = 'vjs-playlist-sidebar';
+            sidebar.innerHTML = `
+                <div class="vjs-playlist-header">
+                    <h3>Segmentos DVR</h3>
+                    <button class="vjs-playlist-close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="vjs-playlist-content" id="playlist-content">
+                    <div style="text-align: center; padding: 20px; color: #666;">
+                        <i class="fas fa-spinner fa-spin" style="font-size: 24px; margin-bottom: 10px;"></i>
+                        <p>Carregando segmentos...</p>
+                    </div>
+                </div>
+            `;
+            
+            // Adicionar ao elemento do player
+            playerEl.appendChild(sidebar);
+            
+            // Event handler para fechar
+            sidebar.querySelector('.vjs-playlist-close').addEventListener('click', function() {
+                sidebar.classList.remove('open');
+            });
+        }
+        
+        // Função para carregar itens da playlist
+        function loadPlaylistItems() {
+            const contentEl = document.getElementById('playlist-content');
+            if (!contentEl) return;
+            
+            // Mostrar loading
+            contentEl.innerHTML = `
+                <div style="text-align: center; padding: 20px; color: #666;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 24px; margin-bottom: 10px;"></i>
+                    <p>Carregando segmentos...</p>
+                </div>
+            `;
+            
+            // Buscar lista de segmentos
+            $.get('/api/dvr/segments', function(data) {
+                if (!data || !data.segments || data.segments.length === 0) {
+                    contentEl.innerHTML = `
+                        <div style="text-align: center; padding: 20px; color: #666;">
+                            <i class="fas fa-film" style="font-size: 32px; margin-bottom: 10px; opacity: 0.5;"></i>
+                            <p>Nenhum segmento disponível</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Limpar conteúdo
+                contentEl.innerHTML = '';
+
+                console.log('[Playlist] Dados recebidos:', data);
+                
+                // Adicionar cada segmento
+                data.segments.forEach((segment, index) => {
+                    // Extrair número do segmento - pode vir como 'number' ou precisar ser extraído do 'filename'
+                    let segmentNumber = segment.number;
+                    if (segmentNumber === undefined || segmentNumber === null) {
+                        // Tentar extrair do filename (formato: dvr_0.ts)
+                        const match = segment.filename ? segment.filename.match(/dvr_(\d+)/) : null;
+                        segmentNumber = match ? parseInt(match[1]) : index;
+                    }
+                    
+                    // Calcular startTime se não existir
+                    const segmentDuration = data.segmentDuration || 30;
+                    const startTime = segment.startTime !== undefined ? segment.startTime : (segmentNumber * segmentDuration);
+                    
+                    const item = document.createElement('div');
+                    item.className = 'vjs-playlist-item';
+                    item.dataset.segmentNumber = segmentNumber;
+                    item.dataset.startTime = startTime;
+                    
+                    // Formatar tempo - lidar com diferentes formatos de timestamp
+                    let segmentDate;
+                    if (segment.timestamp) {
+                        segmentDate = new Date(segment.timestamp);
+                    } else if (segment.created) {
+                        segmentDate = new Date(segment.created);
+                    } else {
+                        segmentDate = new Date();
+                    }
+                    
+                    const timeStr = segmentDate.toLocaleTimeString('pt-BR', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
+                    
+                    // Calcular duração relativa
+                    const now = Date.now();
+                    const ageMs = now - segmentDate.getTime();
+                    let ageStr = '';
+                    
+                    if (ageMs < 60000) {
+                        ageStr = 'Agora';
+                    } else if (ageMs < 3600000) {
+                        ageStr = Math.floor(ageMs / 60000) + 'min atrás';
+                    } else {
+                        const hours = Math.floor(ageMs / 3600000);
+                        const mins = Math.floor((ageMs % 3600000) / 60000);
+                        ageStr = hours + 'h ' + mins + 'min atrás';
+                    }
+                    
+                    // Criar estrutura HTML do item
+                    const thumbContainerId = `thumb-container-${segmentNumber}`;
+                    
+                    item.innerHTML = `
+                        <div class="vjs-playlist-thumbnail" id="${thumbContainerId}">
+                            <div class="placeholder">Carregando...</div>
+                        </div>
+                        <div class="vjs-playlist-info">
+                            <div class="vjs-playlist-title">Segmento #${segmentNumber}</div>
+                            <div class="vjs-playlist-time">
+                                <i class="fas fa-clock"></i>
+                                <span>${timeStr}</span>
+                            </div>
+                            <div class="vjs-playlist-duration">${ageStr}</div>
+                        </div>
+                    `;
+                    
+                    // Adicionar item ao DOM PRIMEIRO
+                    contentEl.appendChild(item);
+                    
+                    // AGORA carregar thumbnail (depois que o item está no DOM)
+                    if (segmentNumber !== undefined && segmentNumber !== null) {
+                        const thumbnailUrl = segment.thumbnailUrl || `/api/dvr/thumbnail/${segmentNumber}`;
+                        const cacheKey = `thumb_${segmentNumber}`;
+                        
+                        // Pegar referência ao container depois de adicionar ao DOM
+                        const thumbContainer = document.getElementById(thumbContainerId);
+                        
+                        // Verificar cache primeiro
+                        if (thumbnailCache.has(cacheKey)) {
+                            if (thumbContainer) {
+                                thumbContainer.innerHTML = `<img src="${thumbnailCache.get(cacheKey)}" alt="Segment ${segment.number}">`;
+                            }
+                        } else {
+                            // Carregar imagem
+                            const img = new Image();
+                            
+                            img.onload = function() {
+                                // Adicionar ao cache
+                                thumbnailCache.set(cacheKey, thumbnailUrl);
+                                
+                                // Limitar tamanho do cache
+                                if (thumbnailCache.size > 100) {
+                                    const firstKey = thumbnailCache.keys().next().value;
+                                    thumbnailCache.delete(firstKey);
+                                }
+                                
+                                // Atualizar o container da thumbnail
+                                if (thumbContainer) {
+                                    thumbContainer.innerHTML = `<img src="${thumbnailUrl}" alt="Segment ${segmentNumber}">`;
+                                }
+                            };
+                            
+                            img.onerror = function() {
+                                // Se falhar, mostrar placeholder
+                                if (thumbContainer) {
+                                    thumbContainer.innerHTML = '<div class="placeholder">Sem preview</div>';
+                                }
+                            };
+                            
+                            // Iniciar carregamento
+                            img.src = thumbnailUrl;
+                        }
+                    } else {
+                        // Se não tem número de segmento, mostrar placeholder
+                        const thumbContainer = document.getElementById(thumbContainerId);
+                        if (thumbContainer) {
+                            thumbContainer.innerHTML = '<div class="placeholder">Sem preview</div>';
+                        }
+                    }
+                    
+                    // Click handler para navegar até o segmento
+                    item.addEventListener('click', function() {
+                        const startTime = parseFloat(this.dataset.startTime);
+                        const segNum = this.dataset.segmentNumber;
+                        
+                        console.log(`[Playlist] Navegando para segmento #${segNum} em ${startTime}s`);
+                        
+                        // Sair do modo live
+                        isLive = false;
+                        
+                        // Se estiver usando WebSocket, mudar para HLS
+                        if (useWebSocket) {
+                            switchToHLS();
+                        }
+                        
+                        // Verificar se precisa trocar para dvr.m3u8
+                        const currentSrc = player.currentSrc();
+                        if (currentSrc && currentSrc.includes('live.m3u8')) {
+                            player.src({
+                                type: 'application/x-mpegURL',
+                                src: '/recordings/dvr.m3u8'
+                            });
+                            
+                            player.one('loadedmetadata', function() {
+                                player.currentTime(startTime);
+                                player.play();
+                                
+                                // Atualizar timeline
+                                currentPosition = startTime;
+                                if (maxDuration > 0) {
+                                    const position = (startTime / maxDuration) * 100;
+                                    $('#timeline-marker').css('left', position + '%');
+                                }
+                                updateTimeline();
+                            });
+                        } else {
+                            // Já está em DVR, apenas fazer seek
+                            player.currentTime(startTime);
+                            player.play();
+                            
+                            // Atualizar timeline
+                            currentPosition = startTime;
+                            if (maxDuration > 0) {
+                                const position = (startTime / maxDuration) * 100;
+                                $('#timeline-marker').css('left', position + '%');
+                            }
+                            updateTimeline();
+                        }
+                        
+                        // Marcar item como ativo
+                        document.querySelectorAll('.vjs-playlist-item').forEach(el => {
+                            el.classList.remove('active');
+                        });
+                        this.classList.add('active');
+                        
+                        // Fechar sidebar após selecionar (opcional)
+                        // document.querySelector('.vjs-playlist-sidebar').classList.remove('open');
+                    });
+                    
+                });
+                
+                console.log(`[Playlist] ${data.segments.length} segmentos carregados`);
+                
+            }).fail(function(error) {
+                console.error('[Playlist] Erro ao carregar segmentos:', error);
+                contentEl.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: #f44;">
+                        <i class="fas fa-exclamation-triangle" style="font-size: 32px; margin-bottom: 10px;"></i>
+                        <p>Erro ao carregar segmentos</p>
+                        <button onclick="loadPlaylistItems()" style="margin-top: 10px; padding: 5px 10px; background: #333; border: 1px solid #555; border-radius: 4px; color: #fff; cursor: pointer;">
+                            Tentar novamente
+                        </button>
+                    </div>
+                `;
             });
         }
 
@@ -959,7 +1468,7 @@
                 if (data.available) {
                     $('#dvr-status').text('Gravando').removeClass('text-yellow-400').addClass('text-green-400');
                     $('#dvr-duration').text(data.durationFormatted);
-                    $('#segment-count').text(data.segments);
+                    $('#segment-count').text(data.segments + (data.thumbnails ? ` (${data.thumbnails} thumbs)` : ''));
                     
                     if (data.duration && data.duration > 0) {
                         maxDuration = data.duration;
@@ -1423,7 +1932,7 @@
             }
         });
         
-        // Timeline hover
+        // Timeline hover com thumbnail preview
         $('#timeline').on('mousemove', function(e) {
             const rect = this.getBoundingClientRect();
             const x = e.clientX - rect.left;
@@ -1445,6 +1954,7 @@
                     timeAgoText = `${Math.floor(timeAgo / 3600)}h ${Math.floor((timeAgo % 3600) / 60)}m atrás`;
                 }
                 
+                // Mostrar tooltip com tempo
                 $('#timeline-tooltip')
                     .html(`
                         <div style="font-weight: bold;">${hoverDate.toLocaleTimeString('pt-BR')}</div>
@@ -1454,12 +1964,144 @@
                         left: x + 'px',
                         display: 'block'
                     });
+                
+                // Carregar e mostrar thumbnail
+                loadThumbnailForTime(hoverTime, x);
             }
         });
         
         $('#timeline').on('mouseleave', function() {
             $('#timeline-tooltip').hide();
+            $('#timeline-thumbnail').hide();
+            
+            // Cancelar carregamento pendente
+            if (thumbnailLoadTimeout) {
+                clearTimeout(thumbnailLoadTimeout);
+                thumbnailLoadTimeout = null;
+            }
         });
+        
+        // Função otimizada para carregar thumbnail
+        function loadThumbnailForTime(timeInSeconds, xPosition) {
+            // Cancelar carregamento anterior
+            if (thumbnailLoadTimeout) {
+                clearTimeout(thumbnailLoadTimeout);
+            }
+            
+            // Calcular segmento correspondente (30s por segmento)
+            const segmentDuration = 30;
+            const segmentNumber = Math.floor(timeInSeconds / segmentDuration);
+            
+            // Verificar cache primeiro
+            const cacheKey = `thumb_${segmentNumber}`;
+            if (thumbnailCache.has(cacheKey)) {
+                showThumbnail(thumbnailCache.get(cacheKey), xPosition);
+                // Pré-carregar segmentos adjacentes
+                preloadAdjacentThumbnails(segmentNumber);
+                return;
+            }
+            
+            // Mostrar placeholder imediato (sem loading spinner para ser mais rápido)
+            const $thumbnail = $('#timeline-thumbnail');
+            $thumbnail
+                .removeClass('loading')
+                .css({
+                    left: xPosition + 'px',
+                    display: 'block',
+                    background: '#222',
+                    border: '1px solid #444'
+                });
+            
+            // Carregar thumbnail IMEDIATAMENTE (sem delay)
+            const thumbnailUrl = `/api/dvr/thumbnail/${segmentNumber}`;
+            
+            // Criar nova imagem para pré-carregar
+            const img = new Image();
+            
+            img.onload = function() {
+                // Adicionar ao cache
+                thumbnailCache.set(cacheKey, thumbnailUrl);
+                
+                // Limitar tamanho do cache (aumentado para 100)
+                if (thumbnailCache.size > 100) {
+                    const firstKey = thumbnailCache.keys().next().value;
+                    thumbnailCache.delete(firstKey);
+                }
+                
+                // Mostrar thumbnail
+                showThumbnail(thumbnailUrl, xPosition);
+                
+                // Pré-carregar segmentos adjacentes
+                preloadAdjacentThumbnails(segmentNumber);
+            };
+            
+            img.onerror = function() {
+                // Se falhar, tentar URL alternativa com tempo
+                const altUrl = `/api/dvr/thumbnail/time/${timeInSeconds}`;
+                const altImg = new Image();
+                
+                altImg.onload = function() {
+                    thumbnailCache.set(cacheKey, altUrl);
+                    showThumbnail(altUrl, xPosition);
+                };
+                
+                altImg.onerror = function() {
+                    // Se ainda falhar, manter placeholder
+                    $thumbnail.css('background', '#111');
+                };
+                
+                altImg.src = altUrl;
+            };
+            
+            img.src = thumbnailUrl;
+        }
+        
+        // Função para pré-carregar thumbnails adjacentes
+        function preloadAdjacentThumbnails(currentSegment) {
+            // Pré-carregar 2 segmentos antes e depois
+            for (let offset = -2; offset <= 2; offset++) {
+                if (offset === 0) continue; // Pular o atual
+                
+                const adjacentSegment = currentSegment + offset;
+                if (adjacentSegment < 0) continue;
+                
+                const cacheKey = `thumb_${adjacentSegment}`;
+                
+                // Se já está no cache, pular
+                if (thumbnailCache.has(cacheKey)) continue;
+                
+                // Pré-carregar em background
+                const url = `/api/dvr/thumbnail/${adjacentSegment}`;
+                const img = new Image();
+                
+                img.onload = function() {
+                    thumbnailCache.set(cacheKey, url);
+                    
+                    // Limitar cache
+                    if (thumbnailCache.size > 100) {
+                        const firstKey = thumbnailCache.keys().next().value;
+                        thumbnailCache.delete(firstKey);
+                    }
+                };
+                
+                // Carregar silenciosamente
+                img.src = url;
+            }
+        }
+        
+        function showThumbnail(url, xPosition) {
+            const $thumbnail = $('#timeline-thumbnail');
+            const $img = $('#timeline-thumbnail-img');
+            
+            $thumbnail.removeClass('loading').html('');
+            $img.attr('src', url);
+            $thumbnail.append($img);
+            
+            $thumbnail.css({
+                left: xPosition + 'px',
+                display: 'block'
+            });
+        }
         
         // Refresh button handler
         $('#refresh-top').click(function() {
@@ -1478,6 +2120,7 @@
                         $('#username-display').text(response.user.username);
                         $('#username-menu').text(response.user.username);
                         
+        
                         const loginTime = new Date(response.loginTime);
                         $('#login-time').text('Login: ' + loginTime.toLocaleString('pt-BR'));
                     }
@@ -1535,8 +2178,10 @@
             // Initial update
             updateUI();
             
+            
             console.log('[DVR] Sistema iniciado com suporte a WebSocket e HLS');
             console.log('[DVR] WebSocket: < 1s latência | HLS: < 2s latência | DVR: 48h buffer');
+            console.log('[DVR] Playlist de segmentos com thumbnails disponível');
         });
 
         // Cleanup on page unload

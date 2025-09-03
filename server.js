@@ -175,7 +175,7 @@ app.use('/dvr-websocket.html', requireAuth, express.static(path.join(config.path
 app.use(express.static(path.resolve(config.paths.public)));
 
 // Inicializar DVR Manager com baixa latência
-const dvrManager = new DVRManagerLowLatency(config.camera.rtspUrl, recordingsDir, 10); // DVR com 10s, Live com 1s
+const dvrManager = new DVRManagerLowLatency(config.camera.rtspUrl, recordingsDir, 30); // DVR com 30s para economia de recursos
 
 // Inicializar WebSocket Proxy para ultra baixa latência
 const wsProxy = new RTSPWebSocketProxy(config.camera.rtspUrl, 8081);
@@ -231,6 +231,9 @@ app.post('/api/dvr/restart', requireAuth, (req, res) => {
 app.get('/api/dvr/segments', requireAuth, (req, res) => {
     try {
         const files = fs.readdirSync(recordingsDir);
+        const segmentDuration = 30; // Duração de cada segmento em segundos
+        const dvrInfo = dvrManager.getDVRInfo();
+        
         const segments = files
             .filter(f => f.startsWith('dvr_') && f.endsWith('.ts'))
             .sort((a, b) => {
@@ -238,19 +241,102 @@ app.get('/api/dvr/segments', requireAuth, (req, res) => {
                 const numB = parseInt(b.match(/dvr_(\d+)/)[1]);
                 return numA - numB;
             })
-            .map(file => {
+            .map((file, index) => {
                 const stats = fs.statSync(path.join(recordingsDir, file));
+                const match = file.match(/dvr_(\d+)/);
+                const segmentNumber = match ? parseInt(match[1]) : index;
+                
+                // Calcular o tempo de início do segmento baseado no número
+                const startTime = segmentNumber * segmentDuration;
+                
                 return {
+                    number: segmentNumber,
                     filename: file,
                     size: stats.size,
                     created: stats.birthtime,
-                    modified: stats.mtime
+                    modified: stats.mtime,
+                    timestamp: stats.birthtime.getTime(),
+                    startTime: startTime,
+                    duration: segmentDuration,
+                    thumbnailUrl: `/api/dvr/thumbnail/${segmentNumber}`
                 };
             });
         
         res.json({
             total: segments.length,
-            segments: segments
+            segments: segments,
+            segmentDuration: segmentDuration,
+            totalDuration: dvrInfo.duration || 0
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Rotas para thumbnails
+app.get('/api/dvr/thumbnail/:segment', requireAuth, (req, res) => {
+    try {
+        const segmentNumber = parseInt(req.params.segment);
+        const thumbnailPath = path.join(recordingsDir, 'thumbnails', `thumb_${segmentNumber}.jpg`);
+        
+        if (fs.existsSync(thumbnailPath)) {
+            res.sendFile(thumbnailPath);
+        } else {
+            res.status(404).json({ error: 'Thumbnail não encontrado' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/dvr/thumbnail/time/:seconds', requireAuth, (req, res) => {
+    try {
+        const timeInSeconds = parseFloat(req.params.seconds);
+        const thumbnailInfo = dvrManager.getThumbnailForTime(timeInSeconds);
+        
+        if (thumbnailInfo.exists) {
+            res.sendFile(thumbnailInfo.path);
+        } else {
+            res.status(404).json({
+                error: 'Thumbnail não encontrado',
+                closestSegment: thumbnailInfo.segment
+            });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/dvr/thumbnails/list', requireAuth, (req, res) => {
+    try {
+        const thumbnailsDir = path.join(recordingsDir, 'thumbnails');
+        
+        if (!fs.existsSync(thumbnailsDir)) {
+            return res.json({ thumbnails: [] });
+        }
+        
+        const files = fs.readdirSync(thumbnailsDir);
+        const thumbnails = files
+            .filter(f => f.startsWith('thumb_') && f.endsWith('.jpg'))
+            .map(file => {
+                const match = file.match(/thumb_(\d+)\.jpg/);
+                const segmentNumber = match ? parseInt(match[1]) : null;
+                const stats = fs.statSync(path.join(thumbnailsDir, file));
+                
+                return {
+                    segment: segmentNumber,
+                    filename: file,
+                    size: stats.size,
+                    created: stats.birthtime,
+                    url: `/api/dvr/thumbnail/${segmentNumber}`
+                };
+            })
+            .filter(t => t.segment !== null)
+            .sort((a, b) => a.segment - b.segment);
+        
+        res.json({
+            total: thumbnails.length,
+            thumbnails: thumbnails
         });
     } catch (error) {
         res.status(500).json({ error: error.message });

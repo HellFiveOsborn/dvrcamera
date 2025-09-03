@@ -12,8 +12,84 @@ class DVRManagerLowLatency {
         this.isRunning = false;
         this.startTime = null;
         this.maxDuration = 48 * 60 * 60; // 48 horas em segundos
-        this.maxSegments = this.maxDuration / this.segmentDuration;
+        this.maxSegments = Math.floor(this.maxDuration / this.segmentDuration);
         this.cleanupCounter = 0; // Contador para limpeza menos frequente
+        
+        // Controle de segmentos e thumbnails
+        this.segmentMap = new Map(); // Mapear número do segmento -> info
+        this.thumbnailsDir = path.join(recordingsDir, 'thumbnails');
+        this.nextSegmentNumber = 0;
+        this.isGeneratingThumbnail = false;
+        
+        // Criar diretório de thumbnails se não existir
+        if (!fs.existsSync(this.thumbnailsDir)) {
+            fs.mkdirSync(this.thumbnailsDir, { recursive: true });
+        }
+        
+        // Inicializar mapa de segmentos existentes
+        this.initializeSegmentMap();
+    }
+    
+    initializeSegmentMap() {
+        try {
+            const files = fs.readdirSync(this.recordingsDir);
+            const tsFiles = files.filter(f => f.startsWith('dvr_') && f.endsWith('.ts'));
+            
+            // Mapear segmentos existentes
+            tsFiles.forEach(file => {
+                const match = file.match(/dvr_(\d+)\.ts/);
+                if (match) {
+                    const segmentNum = parseInt(match[1]);
+                    const filePath = path.join(this.recordingsDir, file);
+                    const stats = fs.statSync(filePath);
+                    this.segmentMap.set(segmentNum, {
+                        timestamp: stats.mtime.getTime(),
+                        size: stats.size
+                    });
+                }
+            });
+            
+            // Encontrar o próximo número disponível para reutilização
+            this.findNextAvailableSegment();
+            
+            console.log(`[DVRManager] Inicializado com ${this.segmentMap.size} segmentos existentes`);
+            console.log(`[DVRManager] Próximo segmento será: dvr_${this.nextSegmentNumber}.ts`);
+            
+        } catch (error) {
+            console.error('[DVRManager] Erro ao inicializar mapa de segmentos:', error);
+        }
+    }
+    
+    findNextAvailableSegment() {
+        // Se não há segmentos, começar do 0
+        if (this.segmentMap.size === 0) {
+            this.nextSegmentNumber = 0;
+            return;
+        }
+        
+        // Se atingimos o máximo, encontrar o segmento mais antigo para reutilizar
+        if (this.segmentMap.size >= this.maxSegments) {
+            let oldestSegment = -1;
+            let oldestTime = Date.now();
+            
+            for (const [num, info] of this.segmentMap.entries()) {
+                if (info.timestamp < oldestTime) {
+                    oldestTime = info.timestamp;
+                    oldestSegment = num;
+                }
+            }
+            
+            this.nextSegmentNumber = oldestSegment;
+            console.log(`[DVRManager] Reutilizando segmento mais antigo: ${oldestSegment}`);
+        } else {
+            // Encontrar o primeiro número não utilizado (0 até maxSegments-1)
+            for (let i = 0; i < this.maxSegments; i++) {
+                if (!this.segmentMap.has(i)) {
+                    this.nextSegmentNumber = i;
+                    break;
+                }
+            }
+        }
     }
 
     start() {
@@ -40,7 +116,7 @@ class DVRManagerLowLatency {
         
         const args = [
             // Input otimizado para mobile (menor buffer, menos CPU)
-            '-rtsp_transport', 'udp',  // TCP mais confiável em redes móveis
+            '-rtsp_transport', 'udp',  // UDP mais rápido
             '-rtsp_flags', 'prefer_tcp',
             '-analyzeduration', '500000', // 0.5s - análise rápida
             '-probesize', '500000',       // 0.5MB - probe pequeno
@@ -48,18 +124,18 @@ class DVRManagerLowLatency {
             '-flags', 'low_delay',
             '-i', this.rtspUrl,
             
-            // Output 1: DVR (OTIMIZADO MOBILE com áudio garantido)
+            // Output 1: DVR com thumbnail embutido
             '-map', '0:v:0',           // Primeiro stream de vídeo
             '-map', '0:a?',            // TODOS os streams de áudio disponíveis
             '-c:v', 'copy',            // COPY DIRETO - ZERO CPU para vídeo!
             
-            // Áudio: tentar copy primeiro, fallback para AAC se necessário
+            // Áudio
             '-c:a', 'aac',             // AAC para garantir compatibilidade
             '-b:a', '128k',            // Bitrate de áudio adequado
             '-ar', '44100',            // Sample rate padrão
             '-ac', '2',                // Stereo
             
-            // HLS otimizado para armazenamento
+            // Segmentação com HLS (mais compatível que segment)
             '-f', 'hls',
             '-hls_time', this.segmentDuration.toString(),
             '-hls_list_size', '0',
@@ -67,8 +143,7 @@ class DVRManagerLowLatency {
             '-hls_flags', 'append_list+program_date_time',
             '-hls_playlist_type', 'event',
             '-hls_segment_type', 'mpegts',
-            '-copyts',                 // Preservar timestamps
-            '-start_at_zero',
+            '-start_number', this.nextSegmentNumber.toString(),
             dvrPlaylist,
             
             // Output 2: Live (COPY vídeo, AAC áudio para compatibilidade)
@@ -110,8 +185,14 @@ class DVRManagerLowLatency {
             if (message.toLowerCase().includes('error') || message.toLowerCase().includes('fatal')) {
                 console.error(`[DVR ERROR]: ${message.trim()}`);
             }
-            // Detectar novos segmentos para limpeza
+            // Detectar novos segmentos
             if (message.includes('Opening') && message.includes('dvr_')) {
+                const match = message.match(/dvr_(\d+)\.ts/);
+                if (match) {
+                    const segmentNum = parseInt(match[1]);
+                    const segmentPath = path.join(this.recordingsDir, `dvr_${segmentNum}.ts`);
+                    this.onNewSegmentCreated(segmentNum, segmentPath);
+                }
                 this.onNewSegment();
             }
         });
@@ -301,6 +382,88 @@ class DVRManagerLowLatency {
         }
     }
 
+    onNewSegmentCreated(segmentNumber, segmentPath) {
+        console.log(`[DVRManager] Novo segmento criado: dvr_${segmentNumber}.ts`);
+        
+        // Atualizar mapa
+        this.segmentMap.set(segmentNumber, {
+            timestamp: Date.now(),
+            size: 0
+        });
+        
+        // Gerar thumbnail de forma simples e eficiente
+        this.generateThumbnailSimple(segmentNumber, segmentPath);
+        
+        // Preparar próximo número para reutilização
+        this.findNextAvailableSegment();
+    }
+    
+    // Versão simplificada e eficiente para Linux/Termux
+    generateThumbnailSimple(segmentNumber, segmentPath) {
+        const thumbnailPath = path.join(this.thumbnailsDir, `thumb_${segmentNumber}.jpg`);
+        
+        // Aguardar apenas 2 segundos para o arquivo ter conteúdo mínimo
+        setTimeout(() => {
+            // Verificar se arquivo existe
+            if (!fs.existsSync(segmentPath)) {
+                console.log(`[Thumbnail] Segmento ${segmentNumber} não encontrado, pulando`);
+                return;
+            }
+            
+            // Comando FFmpeg simplificado e otimizado
+            const args = [
+                '-loglevel', 'error', // Apenas erros, sem output verbose
+                '-nostdin', // Não usar stdin (evita terminal)
+                '-i', segmentPath,
+                '-ss', '00:00:01', // Pegar frame em 1 segundo
+                '-frames:v', '1', // Apenas 1 frame
+                '-vf', 'scale=160:90', // Thumbnail pequeno
+                '-q:v', '15', // Qualidade baixa mas aceitável
+                '-f', 'mjpeg', // Formato JPEG direto
+                '-y', // Sobrescrever sem perguntar
+                thumbnailPath
+            ];
+            
+            // Executar FFmpeg sem abrir terminal
+            const ffmpeg = spawn('ffmpeg', args, {
+                stdio: ['ignore', 'ignore', 'ignore'], // Ignorar todos os streams
+                detached: false, // Não criar processo independente
+                windowsHide: true // Esconder janela no Windows
+            });
+            
+            // Timeout para matar processo se demorar muito
+            const timeout = setTimeout(() => {
+                ffmpeg.kill('SIGKILL');
+                console.log(`[Thumbnail] Timeout ao gerar thumbnail ${segmentNumber}`);
+            }, 5000); // 5 segundos máximo
+            
+            ffmpeg.on('exit', (code) => {
+                clearTimeout(timeout);
+                if (code === 0) {
+                    // Verificar se thumbnail foi criado
+                    if (fs.existsSync(thumbnailPath)) {
+                        const stats = fs.statSync(thumbnailPath);
+                        console.log(`[Thumbnail] Gerado: ${segmentNumber} (${(stats.size/1024).toFixed(1)}KB)`);
+                    }
+                } else if (code !== null) {
+                    console.log(`[Thumbnail] Falha ao gerar ${segmentNumber} (código: ${code})`);
+                }
+            });
+            
+            ffmpeg.on('error', (err) => {
+                clearTimeout(timeout);
+                console.error(`[Thumbnail] Erro FFmpeg: ${err.message}`);
+            });
+            
+        }, 2000); // Aguardar 2 segundos após criação do segmento
+    }
+    
+    // Método antigo mantido para compatibilidade
+    generateThumbnail(segmentNumber, segmentPath) {
+        // Redirecionar para o método simples
+        this.generateThumbnailSimple(segmentNumber, segmentPath);
+    }
+    
     onNewSegment() {
         // Limpar menos frequentemente para economizar CPU
         // Com segmentos de 30s, limpar a cada 60 segmentos = 30 minutos
@@ -327,7 +490,8 @@ class DVRManagerLowLatency {
             // Limitar processamento para economizar CPU
             if (tsFiles.length === 0) return;
             
-            let removedCount = 0; // Declarar no escopo correto
+            let removedCount = 0;
+            let removedThumbs = 0;
             
             // Método simplificado: remover apenas por número máximo
             const maxSegmentsAllowed = Math.floor(this.maxDuration / this.segmentDuration);
@@ -343,19 +507,55 @@ class DVRManagerLowLatency {
                 const segmentsToRemove = tsFiles.length - maxSegmentsAllowed;
                 const filesToRemove = tsFiles.slice(0, segmentsToRemove);
                 
-                // Remover em batch para reduzir syscalls
+                // Remover segmentos e thumbnails correspondentes
                 filesToRemove.forEach(file => {
                     try {
+                        // Remover segmento
                         fs.unlinkSync(path.join(this.recordingsDir, file));
                         removedCount++;
+                        
+                        // Extrair número do segmento e remover thumbnail correspondente
+                        const match = file.match(/dvr_(\d+)\.ts/);
+                        if (match) {
+                            const segmentNum = match[1];
+                            const thumbPath = path.join(this.thumbnailsDir, `thumb_${segmentNum}.jpg`);
+                            if (fs.existsSync(thumbPath)) {
+                                fs.unlinkSync(thumbPath);
+                                removedThumbs++;
+                            }
+                            // Remover do mapa
+                            this.segmentMap.delete(parseInt(segmentNum));
+                        }
                     } catch (e) {
                         // Ignorar erros silenciosamente
                     }
                 });
                 
                 if (removedCount > 0) {
-                    console.log(`[DVRManager] Limpeza: ${removedCount} segmentos removidos`);
+                    console.log(`[DVRManager] Limpeza: ${removedCount} segmentos e ${removedThumbs} thumbnails removidos`);
                 }
+            }
+            
+            // Limpar thumbnails órfãos (sem segmento correspondente)
+            if (fs.existsSync(this.thumbnailsDir)) {
+                const thumbFiles = fs.readdirSync(this.thumbnailsDir);
+                thumbFiles.forEach(thumbFile => {
+                    if (thumbFile.startsWith('thumb_') && thumbFile.endsWith('.jpg')) {
+                        const match = thumbFile.match(/thumb_(\d+)\.jpg/);
+                        if (match) {
+                            const segmentNum = parseInt(match[1]);
+                            // Se não existe segmento correspondente, remover thumbnail
+                            if (!this.segmentMap.has(segmentNum)) {
+                                try {
+                                    fs.unlinkSync(path.join(this.thumbnailsDir, thumbFile));
+                                    removedThumbs++;
+                                } catch (e) {
+                                    // Ignorar
+                                }
+                            }
+                        }
+                    }
+                });
             }
             
             // Limpar segmentos live antigos (manter apenas os últimos 5 para economizar espaço)
@@ -440,7 +640,8 @@ class DVRManagerLowLatency {
                     segments: 0,
                     startTime: null,
                     endTime: null,
-                    liveLatency: '< 2 segundos'
+                    liveLatency: '< 2 segundos',
+                    thumbnails: 0
                 };
             }
             
@@ -459,6 +660,13 @@ class DVRManagerLowLatency {
             
             const duration = tsFiles.length * this.segmentDuration;
             
+            // Contar thumbnails disponíveis
+            let thumbnailCount = 0;
+            if (fs.existsSync(this.thumbnailsDir)) {
+                const thumbFiles = fs.readdirSync(this.thumbnailsDir);
+                thumbnailCount = thumbFiles.filter(f => f.startsWith('thumb_') && f.endsWith('.jpg')).length;
+            }
+            
             return {
                 available: true,
                 duration: duration,
@@ -470,7 +678,9 @@ class DVRManagerLowLatency {
                 currentPosition: 'live',
                 canSeek: true,
                 liveLatency: '< 2 segundos',
-                streamMode: 'Dual (DVR + Live Low Latency)'
+                streamMode: 'Dual (DVR + Live Low Latency)',
+                thumbnails: thumbnailCount,
+                nextSegment: this.nextSegmentNumber
             };
         } catch (error) {
             return {
@@ -478,6 +688,41 @@ class DVRManagerLowLatency {
                 error: error.message
             };
         }
+    }
+    
+    getThumbnailForTime(timeInSeconds) {
+        // Calcular qual segmento corresponde ao tempo
+        const segmentIndex = Math.floor(timeInSeconds / this.segmentDuration);
+        
+        // Procurar o segmento mais próximo no mapa
+        let closestSegment = null;
+        let minDiff = Infinity;
+        
+        for (const [num, info] of this.segmentMap.entries()) {
+            const segmentTime = num * this.segmentDuration;
+            const diff = Math.abs(segmentTime - timeInSeconds);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closestSegment = num;
+            }
+        }
+        
+        if (closestSegment !== null) {
+            const thumbPath = path.join(this.thumbnailsDir, `thumb_${closestSegment}.jpg`);
+            if (fs.existsSync(thumbPath)) {
+                return {
+                    path: thumbPath,
+                    segment: closestSegment,
+                    exists: true
+                };
+            }
+        }
+        
+        return {
+            path: null,
+            segment: closestSegment,
+            exists: false
+        };
     }
 
     formatDuration(seconds) {

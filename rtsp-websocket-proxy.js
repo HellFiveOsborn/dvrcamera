@@ -56,9 +56,10 @@ class RTSPWebSocketProxy {
             '-rtsp_flags', 'prefer_tcp',
             '-analyzeduration', '1000000',
             '-probesize', '1000000',
-            '-err_detect', 'ignore_err',  // Ignorar erros de decodificação
-            '-fflags', '+nobuffer+genpts+igndts+discardcorrupt',
+            '-max_delay', '0',
+            '-fflags', '+nobuffer+genpts+discardcorrupt',
             '-flags', 'low_delay',
+            '-err_detect', 'ignore_err',
             '-i', this.rtspUrl,
             
             // Mapear streams explicitamente
@@ -78,12 +79,9 @@ class RTSPWebSocketProxy {
             '-b:a', '128k',    // Bitrate aumentado para melhor qualidade
             '-ar', '44100',    // Sample rate padrão
             '-ac', '2',        // Stereo para melhor qualidade
-            '-muxdelay', '0.001',
             
             // Flags de baixa latência
-            '-strict', 'experimental',
-            '-max_delay', '0',
-            '-max_interleave_delta', '0',
+            '-muxdelay', '0.001',
             '-avoid_negative_ts', 'make_zero',
             
             // Output para pipe
